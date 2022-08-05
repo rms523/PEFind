@@ -26,8 +26,9 @@ void info_banner()
     cout << "-ci or --nocase                         search for case insensitive string" << endl;
     cout << "--h or --hex                            search for hex string" << endl;
     cout << "--w or --wildcard                       search for hex string with wildcard using xx for byte" << endl;
-    cout << "Example: " << endl;
-    cout << "PEFind.exe - a / -u / -au / -ci / -h / -w search_dir search_str" << endl;
+    cout << "-s  or --sort                           sort the search result with specified predicate" << endl;
+    cout << "Example: search for case unicode string and sort the result by offset" << endl;
+    cout << "PEFind.exe -a -s 1 search_dir search_str" << endl;
 }
 void banner()
 {
@@ -68,7 +69,7 @@ void printfunction(const vector<file_info>& all_file_info)
 
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     FlushConsoleInputBuffer(hConsole);
-    SetConsoleTextAttribute(hConsole, 9);  //Light Green
+    SetConsoleTextAttribute(hConsole, 10);  //Light Green
     cout << std::setw(maxlen+10) << std::left << "FilePath " << std::setw(12) << "FileOff" << std::setw(9) << "SecIndex" << std::setw(12)
         << "secOffset" << std::setw(10) << "secName" << std::setw(40) << "isPE" << endl;
 
@@ -149,7 +150,7 @@ int main(int argc, char **argv)
 
     vector<file_info> all_file_info;
 
-    BOOL sortResult = false;
+    bool sortResult = false;
     if (argv[1] == string("-au") || argv[1] == string("-ua"))
     {
         if (argv[2] == string("-s")) sortResult = true;
@@ -195,7 +196,6 @@ int main(int argc, char **argv)
 
     if (argv[1] == string("-a"))
     {
-        cout << "In ascii" << endl;
         if (argv[2] == string("-s")) sortResult = true;
 
         if (sortResult && argc >= 6)

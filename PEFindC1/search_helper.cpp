@@ -60,7 +60,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
     if (size.QuadPart > MAX_SIZE)
     {
         // File to big to process
-        //cout << "File too big to process" << endl;
+        std::cout << "File too big to process" << std::endl;
         return;
     }
 
