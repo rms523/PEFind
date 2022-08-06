@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#define MAX_SIZE 0x10000000
+#define MAX_SIZE 0x40000000
 using std::string;
 
 struct file_info {

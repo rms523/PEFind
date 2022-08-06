@@ -67,21 +67,34 @@ void printfunction(const vector<file_info>& all_file_info)
 
     banner();
 
+    std::ios_base::fmtflags f(cout.flags());
+
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     FlushConsoleInputBuffer(hConsole);
     SetConsoleTextAttribute(hConsole, 10);  //Light Green
-    cout << std::setw(maxlen+10) << std::left << "FilePath " << std::setw(12) << "FileOff" << std::setw(9) << "SecIndex" << std::setw(12)
-        << "secOffset" << std::setw(10) << "secName" << std::setw(40) << "isPE" << endl;
+    cout << std::setw(maxlen + 5) << std::left << "FilePath";
+    cout << std::setw(12) << "FileOff";
+    cout << std::setw(12) << "SecIndex";
+    cout << std::setw(12) << "secOffset";
+    cout << std::setw(18) << "secName";
+    cout << std::setw(38) << "isPE";
+    cout << endl;
 
     SetConsoleTextAttribute(hConsole, 15);
 
+
     for (it = all_file_info.begin(); it != all_file_info.end(); it++) 
     {
-        cout << std::setw(maxlen+10) << std::left << (*it).filepath << std::setw(12) << std::uppercase << std::hex << (*it).fileoffset <<
-            std::setw(9) <<  (*it).sectionindex << std::setw(12) << (*it).sectionoffset << std::setw(10) << (*it).sectionName 
-            << std::setw(40) << (*it).isPE << endl;  
+        cout.flags(f);
+        cout << std::setw(maxlen + 5) << std::left << (*it).filepath;
+        cout << std::setw(12) << std::uppercase << std::hex << (*it).fileoffset;
+        cout << std::setw(12) << (*it).sectionindex;
+        cout << std::setw(12) << (*it).sectionoffset;
+        cout << std::setw(18) << (*it).sectionName;
+        cout << std::setw(38) << (*it).isPE;
+        cout << endl;
     }
-
+    cout.flags(f);
 }
 
 BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info)
