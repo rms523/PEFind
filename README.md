@@ -2,17 +2,28 @@
 This tool was created to assist in static detection writing based on strings. Couldn't find any existing tool which is simple enough and allows to search various string formats in multiple files and sort the results.
 
 Search for ascii, unicode strings in PE files and sort the result.
-![image](https://user-images.githubusercontent.com/19687913/184080841-8219a05b-079f-41fd-9db3-48c571410cf7.png)
+```
+PEFind.exe
+```
+![image](https://user-images.githubusercontent.com/19687913/184084245-4186f63a-9f84-411e-a47b-cf7743b93506.png)
 
 Search for unicode string "Setup" in given folder E:\tmp
-![image](https://user-images.githubusercontent.com/19687913/184079627-e5243f63-cc54-44c1-a52d-327e26bbd61f.png)
+```
+PEFindC1.exe -u E:\tmp "Setup"
+```
+![image](https://user-images.githubusercontent.com/19687913/184084967-5b05911c-cb51-4af7-9255-06e73498ce26.png)
 
 Sort the results by filepath ( -s 0 ) , fileOffset ( -s 1 ) , section index ( -s 2 ) and so on.
+```
+PEFindC1.exe -u -s 1 E:\tmp "Setup"
+```
+![image](https://user-images.githubusercontent.com/19687913/184094814-542d1f98-fc14-4934-bc96-5ba37941cdd9.png)
 
-![image](https://user-images.githubusercontent.com/19687913/184079778-7b9db953-791a-488c-b363-35cf9443a368.png)
-
-Search for both ascii and unicode strings in give folder and sort the result by section name.
-![image](https://user-images.githubusercontent.com/19687913/184081676-676310a2-d7e7-44c6-b6c2-475fcacbf1f2.png)
+Search for both ascii and unicode strings in give folder and sort the result by section index.
+```
+PEFindC1.exe -au -s 2 E:\tmp "Setup"
+```
+![image](https://user-images.githubusercontent.com/19687913/184095029-a08f6562-3417-40d5-91aa-ffb9758eefa0.png)
 
 If PE is invalid or string is not present in PE sections ( i.e string in overlay or in PE header ) , it will show Invalid PE or string not in sections.
 
