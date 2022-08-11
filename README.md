@@ -1,5 +1,7 @@
 # PEFind
-Search for ascii, unicode and hex strings in PE files.
+This tool was created to assist in static detection writing based on strings. Couldn't find any existing tool which is simple enough and allows to search various string formats in multiple files and sort the results.
+
+Search for ascii, unicode strings in PE files and sort the result.
 ![image](https://user-images.githubusercontent.com/19687913/184080841-8219a05b-079f-41fd-9db3-48c571410cf7.png)
 
 Search for unicode string "Setup" in given folder E:\tmp
