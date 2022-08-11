@@ -14,9 +14,11 @@ int searchHexBytes(const BYTE* bufTosearch, const BYTE * stringTosearch, int str
     //string::size_type stringsize = stringTosearch.size();
 
 
-    for (i = 0; i < bufSize - stringsize; i++)
+    for (i = 0; i < bufSize; i++)
     {
         if (j == stringsize) break;
+
+        if (j == 0 && (stringsize > (bufSize - i))) break;
 
         if (bufTosearch[i] == (BYTE)stringTosearch[j])
         {
@@ -136,7 +138,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             temp_file_info.sectionoffset = 0;
             temp_file_info.sectionName = "";
             temp_file_info.stringTosearch = stringTosearch;
-            if (isPE) temp_file_info.isPE = "Invalid PE or String not in sections";
+            if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections?)";
             else temp_file_info.isPE = "Not a PE file.";
             all_file_info.push_back(temp_file_info);
             return;
@@ -175,9 +177,8 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
     {
         char combined_path[MAX_PATH];
         strcpy_s(combined_path, directory.c_str());
-        if (strcmp(findData.cFileName, "..") == 0) continue;
-        if (strcmp(findData.cFileName, ".") == 0) continue;
         PathAppend(combined_path, findData.cFileName);
+        if (checkFile(combined_path) == 0)
         searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info);
     }
 

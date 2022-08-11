@@ -27,7 +27,7 @@ void info_banner()
     cout << "--h or --hex                            search for hex string" << endl;
     cout << "--w or --wildcard                       search for hex string with wildcard using xx for byte" << endl;
     cout << "-s  or --sort                           sort the search result with specified predicate" << endl;
-    cout << "Example: search for case unicode string and sort the result by offset" << endl;
+    cout << "Example: search for case unicode string and sort the result by filepath(0), offset(1), secIndex(2), secOffset(3), secName(4), isPE(5)" << endl;
     cout << "PEFind.exe -a -s 1 search_dir search_str" << endl;
 }
 void banner()
