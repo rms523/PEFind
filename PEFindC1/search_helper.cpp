@@ -111,7 +111,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             return;
         }
         uniStringTosearch[k-1] = L'\0';
-        int t = (sizeof(uniStringTosearch)-1) * sizeof(WCHAR);
+        int t = (k - 1) * sizeof(WCHAR);        // ignore the last zero bytes for search as we want any substring 
         global_offset = searchHexBytes(buf, (BYTE *) uniStringTosearch, t, size.QuadPart);
 
     }
@@ -138,7 +138,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             temp_file_info.sectionoffset = 0;
             temp_file_info.sectionName = "";
             temp_file_info.stringTosearch = stringTosearch;
-            if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections?)";
+            if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections(overlay?)";
             else temp_file_info.isPE = "Not a PE file.";
             all_file_info.push_back(temp_file_info);
             return;

@@ -23,9 +23,9 @@ void info_banner()
     cout << "-a or --ascii                           search for ascii string" << endl;
     cout << "-u or --unicode                         search for unicode string" << endl;
     cout << "-au or (--ascii and --unicode)          search for both ascii and unicode string" << endl;
-    cout << "-ci or --nocase                         search for case insensitive string" << endl;
-    cout << "--h or --hex                            search for hex string" << endl;
-    cout << "--w or --wildcard                       search for hex string with wildcard using xx for byte" << endl;
+    //cout << "-ci or --nocase                         search for case insensitive string" << endl;                        //TBD
+    //cout << "--h or --hex                            search for hex string" << endl;
+    //cout << "--w or --wildcard                       search for hex string with wildcard using xx for byte" << endl;
     cout << "-s  or --sort                           sort the search result with specified predicate" << endl;
     cout << "Example: search for case unicode string and sort the result by filepath(0), offset(1), secIndex(2), secOffset(3), secName(4), isPE(5)" << endl;
     cout << "PEFind.exe -a -s 1 search_dir search_str" << endl;
