@@ -13,7 +13,7 @@ using std::cout;
 using std::endl;
 
 
-BOOL checkString(const string, const string, BOOL, vector<file_info> &);
+BOOL checkString(const string, const string, BOOL, vector<file_info> &, BOOL);
 void checkString();
 
 void checkString() {}
@@ -49,6 +49,25 @@ _____  ______      ______ _____ _   _ _____   _____
     cout << "Welcome to the PE-FindC" << endl << endl;
 }
 
+static void print_header(std::size_t maxlen)
+{
+    std::ios_base::fmtflags f(cout.flags());
+
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    FlushConsoleInputBuffer(hConsole);
+    SetConsoleTextAttribute(hConsole, 10);  //Light Green
+    cout << std::setw(maxlen + 5) << std::left << "FilePath";
+    cout << std::setw(12) << "FileOff";
+    cout << std::setw(12) << "SecIndex";
+    cout << std::setw(12) << "secOffset";
+    cout << std::setw(18) << "secName";
+    cout << std::setw(38) << "isPE";
+    cout << endl;
+
+    SetConsoleTextAttribute(hConsole, 15);
+    cout.flags(f);
+}
+
 void printfunction(const vector<file_info>& all_file_info)
 {
     vector<file_info>::const_iterator it;
@@ -69,18 +88,7 @@ void printfunction(const vector<file_info>& all_file_info)
 
     std::ios_base::fmtflags f(cout.flags());
 
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    FlushConsoleInputBuffer(hConsole);
-    SetConsoleTextAttribute(hConsole, 10);  //Light Green
-    cout << std::setw(maxlen + 5) << std::left << "FilePath";
-    cout << std::setw(12) << "FileOff";
-    cout << std::setw(12) << "SecIndex";
-    cout << std::setw(12) << "secOffset";
-    cout << std::setw(18) << "secName";
-    cout << std::setw(38) << "isPE";
-    cout << endl;
-
-    SetConsoleTextAttribute(hConsole, 15);
+    print_header(maxlen);
 
 
     for (it = all_file_info.begin(); it != all_file_info.end(); it++) 
@@ -97,7 +105,7 @@ void printfunction(const vector<file_info>& all_file_info)
     cout.flags(f);
 }
 
-BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info)
+BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
 {
     //cout << pathTosearch << endl;
     if (checkFile(pathTosearch) == -1) 
@@ -108,13 +116,13 @@ BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL is
     if (checkFile(pathTosearch) == 0)
     {
         //cout << "calling search for file" << endl;
-        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, false);
+        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, false, stream);
         return true;
     }
     else if (checkFile(pathTosearch) == 1)
     {
         //cout << "calling search for directory" << endl;
-        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, true);
+        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, true, stream);
         return true;
     }
 
@@ -170,17 +178,19 @@ int main(int argc, char **argv)
 
         if (sortResult && argc >= 6) 
         {
-            checkString(argv[4], argv[5], 0, all_file_info);
-            checkString(argv[4], argv[5], 1, all_file_info);
+            checkString(argv[4], argv[5], 0, all_file_info, FALSE);
+            checkString(argv[4], argv[5], 1, all_file_info, FALSE);
             sortfunction(all_file_info, atoi(argv[3]));
+            cout << endl; // finish status line
+            printfunction(all_file_info);
         }
         else 
         {
-            checkString(argv[2], argv[3], 0, all_file_info);
-            checkString(argv[2], argv[3], 1, all_file_info);
+            banner();
+            print_header(90);
+            checkString(argv[2], argv[3], 0, all_file_info, TRUE);
+            checkString(argv[2], argv[3], 1, all_file_info, TRUE);
         }
-
-        printfunction(all_file_info);
 
         return 0;
     }
@@ -191,17 +201,19 @@ int main(int argc, char **argv)
 
         if (sortResult && argc >= 7)
         {
-            checkString(argv[5], argv[6], 0, all_file_info);
-            checkString(argv[5], argv[6], 1, all_file_info);
+            checkString(argv[5], argv[6], 0, all_file_info, FALSE);
+            checkString(argv[5], argv[6], 1, all_file_info, FALSE);
             sortfunction(all_file_info, atoi(argv[3]));
+            cout << endl; // finish status line
+            printfunction(all_file_info);
         }
         else
         {
-            checkString(argv[3], argv[4], 0, all_file_info);
-            checkString(argv[3], argv[4], 1, all_file_info);
+            banner();
+            print_header(90);
+            checkString(argv[3], argv[4], 0, all_file_info, TRUE);
+            checkString(argv[3], argv[4], 1, all_file_info, TRUE);
         }
-
-        printfunction(all_file_info);
 
         return 0;
     }
@@ -213,15 +225,17 @@ int main(int argc, char **argv)
 
         if (sortResult && argc >= 6)
         {
-            checkString(argv[4], argv[5], 0, all_file_info);
+            checkString(argv[4], argv[5], 0, all_file_info, FALSE);
             sortfunction(all_file_info, atoi(argv[3]));
+            cout << endl; // finish status line
+            printfunction(all_file_info);
         }
         else
         {
-            checkString(argv[2], argv[3], 0, all_file_info);
+            banner();
+            print_header(90);
+            checkString(argv[2], argv[3], 0, all_file_info, TRUE);
         }
-
-        printfunction(all_file_info);
 
         return 0;
     }
@@ -232,15 +246,17 @@ int main(int argc, char **argv)
 
         if (sortResult && argc >= 6)
         {
-            checkString(argv[4], argv[5], 1, all_file_info);
+            checkString(argv[4], argv[5], 1, all_file_info, FALSE);
             sortfunction(all_file_info, atoi(argv[3]));
+            cout << endl; // finish status line
+            printfunction(all_file_info);
         }
         else
         {
-            checkString(argv[2], argv[3], 1, all_file_info);
+            banner();
+            print_header(90);
+            checkString(argv[2], argv[3], 1, all_file_info, TRUE);
         }
-
-        printfunction(all_file_info);
 
         return 0;
     }

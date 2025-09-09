@@ -47,7 +47,38 @@ int searchHexBytes(const BYTE* bufTosearch, const BYTE * stringTosearch, int str
 }
 
 
-void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info)
+static void print_row_stream(const file_info& fi)
+{
+    std::ios_base::fmtflags f(std::cout.flags());
+    size_t maxlen = 90; // fixed width for streaming mode
+
+    std::cout << std::setw(maxlen + 5) << std::left << fi.filepath;
+    std::cout << std::setw(12) << std::uppercase << std::hex << fi.fileoffset;
+    std::cout << std::setw(12) << fi.sectionindex;
+    std::cout << std::setw(12) << fi.sectionoffset;
+    std::cout << std::setw(18) << fi.sectionName;
+    std::cout << std::setw(38) << fi.isPE;
+    std::cout << std::endl;
+
+    std::cout.flags(f);
+}
+
+static void status_update(const std::string& text)
+{
+    static size_t last_len = 0;
+    std::string msg = std::string("Processing: ") + text;
+    // Trim overly long messages to avoid wrapping
+    const size_t max_show = 160;
+    if (msg.size() > max_show) {
+        msg = msg.substr(0, max_show - 3) + "...";
+    }
+    // Pad with spaces to fully clear previous content
+    size_t pad = (last_len > msg.size()) ? (last_len - msg.size()) : 0;
+    std::cout << '\r' << msg << std::string(pad, ' ') << std::flush;
+    last_len = msg.size();
+}
+
+void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
 {
     HANDLE hHandle = CreateFile(pathTosearch.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     
@@ -141,6 +172,10 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections(overlay?)";
             else temp_file_info.isPE = "Not a PE file.";
             all_file_info.push_back(temp_file_info);
+            if (stream)
+            {
+                print_row_stream(temp_file_info);
+            }
             return;
         }
 
@@ -154,13 +189,17 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             temp_file_info.stringTosearch = stringTosearch;
             temp_file_info.isPE = "PE";
             all_file_info.push_back(temp_file_info);
+            if (stream)
+            {
+                print_row_stream(temp_file_info);
+            }
         }
         return;
     }
 
 }
 
-void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info)
+void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
 {
     WIN32_FIND_DATA findData;
     HANDLE hFind = INVALID_HANDLE_VALUE;
@@ -179,7 +218,11 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
         strcpy_s(combined_path, directory.c_str());
         PathAppend(combined_path, findData.cFileName);
         if (checkFile(combined_path) == 0)
-        searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info);
+        {
+            if (!stream)
+                status_update(combined_path);
+            searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info, stream);
+        }
     }
 
     FindClose(hFind);
@@ -188,13 +231,13 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
 }
 
 
-void searchString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL isDir)
+void searchString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL isDir, BOOL stream)
 {
     if (isDir) 
     {
         try
         {
-            searchStringInDir(pathTosearch, stringTosearch, isUnicode, all_file_info);
+            searchStringInDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream);
         }
         catch (std::exception const& e)
         {
@@ -203,5 +246,7 @@ void searchString(const string pathTosearch, const string stringTosearch, BOOL i
         return;
     }
 
-    searchStringinFile(pathTosearch, stringTosearch, isUnicode, all_file_info);
+    if (!stream)
+        status_update(pathTosearch);
+    searchStringinFile(pathTosearch, stringTosearch, isUnicode, all_file_info, stream);
 }
