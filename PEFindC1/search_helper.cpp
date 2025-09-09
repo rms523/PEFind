@@ -1,6 +1,7 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include "file_info.h"
 #include "search_helper.h"
 #include "pe_hdrs_helper.h"
@@ -93,109 +94,142 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
     if (!GetFileSizeEx(hHandle, &size))
     {
         std::cout << "Unable to get file size" << std::endl;
-        return;
-    }
-
-    if (size.QuadPart > MAX_SIZE)
-    {
-        // File to big to process
-        std::cout << "File too big to process" << std::endl;
-        return;
-    }
-
-    BYTE* buf = new BYTE[size.QuadPart+1];
-    memset(buf, 0, sizeof(buf));
-
-    DWORD bytesRead;
-    if (ReadFile(hHandle, buf, size.QuadPart, &bytesRead, NULL)) {
-        //printf("File successfully read!\n");
-        //printf("%d bytes read.\n", bytesRead);
-        //printf("%s\n", buf);
         CloseHandle(hHandle);
+        return;
     }
-    else
+
+    // Read a small header region for later section mapping
+    const DWORD HEADER_READ = static_cast<DWORD>(std::min<ULONGLONG>(size.QuadPart, 64ULL * 1024ULL));
+    std::vector<BYTE> header_buf(HEADER_READ, 0);
+    DWORD header_bytes = 0;
+    LARGE_INTEGER zero{}; zero.QuadPart = 0;
+    SetFilePointerEx(hHandle, zero, NULL, FILE_BEGIN);
+    if (!ReadFile(hHandle, header_buf.data(), HEADER_READ, &header_bytes, NULL))
     {
         CloseHandle(hHandle);
-        std::cout << "File reading failed!" << std::endl;
+        std::cout << "File header read failed!" << std::endl;
         return;
     }
 
-    int isPE = 1;
+    // Determine if it looks like a PE (MZ)
+    int isPE = checkPE(header_buf.data()) ? 1 : 0;
     int sectionIndex = 0;
 
-    if (!checkPE(buf))
+    // Build pattern bytes
+    int global_offset = -1;
+    string::size_type stringsize = stringTosearch.size();
+    if (stringsize == 0)
     {
-        //"Not a valid PE file"
-        isPE = 0;
+        CloseHandle(hHandle);
+        return;
     }
 
-    int k = 0, global_offset = 0;
-    string::size_type stringsize = stringTosearch.size();
+    BYTE* pattern = nullptr;
+    int pattern_len = 0;
+    std::vector<BYTE> ascii_pat;
+    std::vector<WCHAR> wpat;
 
     if (isUnicode)
     {
-        WCHAR* uniStringTosearch = new WCHAR[stringsize + 1];
-        k = MultiByteToWideChar(CP_UTF8, 0, stringTosearch.c_str(), -1, uniStringTosearch, stringsize+1);
+        wpat.resize(stringsize + 1);
+        int k = MultiByteToWideChar(CP_UTF8, 0, stringTosearch.c_str(), -1, wpat.data(), static_cast<int>(wpat.size()));
         if (!k)
         {
+            CloseHandle(hHandle);
             std::cout << "Unicode conversion failed" << std::endl;
             return;
         }
-        uniStringTosearch[k-1] = L'\0';
-        int t = (k - 1) * sizeof(WCHAR);        // ignore the last zero bytes for search as we want any substring 
-        global_offset = searchHexBytes(buf, (BYTE *) uniStringTosearch, t, size.QuadPart);
-
+        wpat[static_cast<size_t>(k - 1)] = L'\0';
+        pattern = reinterpret_cast<BYTE*>(wpat.data());
+        pattern_len = (k - 1) * sizeof(WCHAR); // ignore last null for substring search
     }
-
-    else 
+    else
     {
-        global_offset = searchHexBytes(buf, (BYTE *) stringTosearch.c_str(), stringsize, size.QuadPart);
+        ascii_pat.assign(stringTosearch.begin(), stringTosearch.end());
+        pattern = ascii_pat.data();
+        pattern_len = static_cast<int>(ascii_pat.size());
     }
 
-    
+    // Stream through file in chunks with overlap to catch boundary matches
+    const DWORD CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
+    const DWORD OVERLAP = (pattern_len > 0) ? static_cast<DWORD>(pattern_len - 1) : 0;
+    std::vector<BYTE> buf(CHUNK_SIZE + OVERLAP);
+    DWORD overlap_len = 0;
+    ULONGLONG base_offset = 0;
+
+    SetFilePointerEx(hHandle, zero, NULL, FILE_BEGIN);
+    for (;;)
+    {
+        DWORD bytesRead = 0;
+        if (!ReadFile(hHandle, buf.data() + overlap_len, CHUNK_SIZE, &bytesRead, NULL))
+        {
+            std::cout << "File reading failed!" << std::endl;
+            CloseHandle(hHandle);
+            return;
+        }
+        if (bytesRead == 0)
+        {
+            break; // EOF
+        }
+
+        DWORD search_size = overlap_len + bytesRead;
+        int pos = searchHexBytes(buf.data(), pattern, pattern_len, search_size);
+        if (pos != -1)
+        {
+            global_offset = static_cast<int>(base_offset + pos);
+            break;
+        }
+
+        DWORD new_overlap = std::min<DWORD>(OVERLAP, search_size);
+        if (new_overlap > 0)
+        {
+            memmove(buf.data(), buf.data() + (search_size - new_overlap), new_overlap);
+        }
+        overlap_len = new_overlap;
+        base_offset += (search_size - overlap_len);
+    }
+
+    CloseHandle(hHandle);
+
     // Not found in file
     if (global_offset == -1) return;
 
-    else
+    // Use header buffer to derive section information
+    PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes, global_offset, sectionIndex);
+
+    if (sectionHeader == NULL)
     {
-        PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(buf, size.QuadPart + 1, global_offset, sectionIndex);
-
-        if (sectionHeader == NULL)
+        file_info temp_file_info;
+        temp_file_info.filepath = pathTosearch;
+        temp_file_info.fileoffset = global_offset;
+        temp_file_info.sectionindex = 0;
+        temp_file_info.sectionoffset = 0;
+        temp_file_info.sectionName = "";
+        temp_file_info.stringTosearch = stringTosearch;
+        if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections(overlay?)";
+        else temp_file_info.isPE = "Not a PE file.";
+        all_file_info.push_back(temp_file_info);
+        if (stream)
         {
-            file_info temp_file_info;
-            temp_file_info.filepath = pathTosearch;
-            temp_file_info.fileoffset = global_offset;
-            temp_file_info.sectionindex = 0;
-            temp_file_info.sectionoffset = 0;
-            temp_file_info.sectionName = "";
-            temp_file_info.stringTosearch = stringTosearch;
-            if (isPE) temp_file_info.isPE = "Invalid PE or string not in sections(overlay?)";
-            else temp_file_info.isPE = "Not a PE file.";
-            all_file_info.push_back(temp_file_info);
-            if (stream)
-            {
-                print_row_stream(temp_file_info);
-            }
-            return;
-        }
-
-        else {
-            file_info temp_file_info;
-            temp_file_info.filepath = pathTosearch;
-            temp_file_info.fileoffset = global_offset;
-            temp_file_info.sectionindex = sectionIndex;
-            temp_file_info.sectionoffset = global_offset - sectionHeader->PointerToRawData;
-            temp_file_info.sectionName = string(reinterpret_cast<char*>(sectionHeader->Name), 8);
-            temp_file_info.stringTosearch = stringTosearch;
-            temp_file_info.isPE = "PE";
-            all_file_info.push_back(temp_file_info);
-            if (stream)
-            {
-                print_row_stream(temp_file_info);
-            }
+            print_row_stream(temp_file_info);
         }
         return;
     }
+
+    file_info temp_file_info;
+    temp_file_info.filepath = pathTosearch;
+    temp_file_info.fileoffset = global_offset;
+    temp_file_info.sectionindex = sectionIndex;
+    temp_file_info.sectionoffset = global_offset - sectionHeader->PointerToRawData;
+    temp_file_info.sectionName = string(reinterpret_cast<char*>(sectionHeader->Name), 8);
+    temp_file_info.stringTosearch = stringTosearch;
+    temp_file_info.isPE = "PE";
+    all_file_info.push_back(temp_file_info);
+    if (stream)
+    {
+        print_row_stream(temp_file_info);
+    }
+    return;
 
 }
 
