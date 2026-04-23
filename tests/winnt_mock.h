@@ -9,12 +9,14 @@
 typedef uint8_t  BYTE;
 typedef uint16_t WORD;
 typedef uint32_t DWORD;
+typedef uint32_t ULONG;
 typedef int      LONG;
-typedef ULONG    ULONG;
 typedef void     *LPVOID;
 typedef const void *LPCVOID;
 typedef char     CHAR;
 typedef wchar_t  WCHAR;
+// ULONGLONG must be defined before IMAGE_OPTIONAL_HEADER64 uses it
+typedef unsigned long long ULONGLONG;
 
 // PE signatures and constants
 #define IMAGE_DOS_SIGNATURE             0x5A4D      // MZ
@@ -165,5 +167,4 @@ struct IMAGE_SECTION_HEADER {
 
 #pragma pack(pop)
 
-// Re-define ULONGLONG for completeness
-typedef unsigned long long ULONGLONG;
+

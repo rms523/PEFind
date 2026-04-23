@@ -1,6 +1,6 @@
-// Note: HexPattern, parse_hex_pattern(), BMH search, and wildcard matching are also defined in algo.h.
-// algo.h is header-only with pure C++ implementations (uses winnt_mock.h for tests without Windows SDK).
-// This file contains the Windows-dependent production implementation. Both share identical logic.
+// PEFind search helpers — Windows-dependent production implementation.
+// Core algorithms (HexPattern, parse_hex_pattern, BMH search, wildcard matching)
+// are defined in algo.h and reused here to avoid duplication.
 
 #include <vector>
 #include <iostream>
@@ -9,54 +9,10 @@
 #include "file_info.h"
 #include "search_helper.h"
 #include "pe_hdrs_helper.h"
+#include "algo.h"
 #include "Shlwapi.h"
 
 #pragma comment(lib, "Shlwapi.lib")
-
-HexPattern parse_hex_pattern(const string& hexStr) {
-    HexPattern pattern;
-    
-    // Remove spaces first
-    string cleaned;
-    for (char c : hexStr) {
-        if (c != ' ') cleaned += c;
-    }
-    
-    size_t i = 0;
-    while (i < cleaned.size()) {
-        char c1 = tolower(cleaned[i]);
-        
-        // Check for wildcard "xx" or "XX"
-        if (c1 == 'x' && i + 1 < cleaned.size() && tolower(cleaned[i+1]) == 'x') {
-            pattern.bytes.push_back(0);
-            pattern.isWildcard.push_back(true);
-            i += 2;
-        } else if (i + 1 < cleaned.size()) {
-            char h = toupper(cleaned[i]);
-            char l = toupper(cleaned[i+1]);
-            
-            BYTE high, low;
-            if (h >= '0' && h <= '9') high = static_cast<BYTE>(h - '0');
-            else if (h >= 'A' && h <= 'F') high = static_cast<BYTE>(h - 'A' + 10);
-            else { ++i; continue; }
-            
-            if (l >= '0' && l <= '9') low = static_cast<BYTE>(l - '0');
-            else if (l >= 'A' && l <= 'F') low = static_cast<BYTE>(l - 'A' + 10);
-            else { ++i; continue; }
-            
-            pattern.bytes.push_back(static_cast<BYTE>((high << 4) | low));
-            pattern.isWildcard.push_back(false);
-            i += 2;
-        } else {
-            // Single remaining character - skip it
-            ++i;
-        }
-    }
-    
-    return pattern;
-}
-
-
 
 // RAII wrapper for HANDLE to prevent leaks on early returns
 struct HandleGuard {
@@ -69,86 +25,6 @@ struct HandleGuard {
 
 // Case-insensitive byte comparison helper for ASCII mode
 static bool bytesEqualCI(BYTE a, BYTE b) { return tolower(a) == tolower(b); }
-
-// Boyer-Moore-Horspool search — O(n/m) average case.
-using ByteCompare = bool(*)(BYTE, BYTE);
-
-static int searchBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLen,
-                                          const BYTE* needle, size_t needleLen,
-                                          ByteCompare cmp)
-{
-    if (needleLen == 0 || needleLen > haystackLen) return -1;
-
-    constexpr size_t ALPHABET_SIZE = 256;
-    int skip[ALPHABET_SIZE];
-    for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
-    for (size_t i = 0; i < needleLen - 1; ++i) {
-        skip[static_cast<unsigned char>(needle[i])] = static_cast<int>(needleLen - 1 - i);
-    }
-
-    size_t i = 0;
-    while (i <= haystackLen - needleLen) {
-        size_t j = needleLen;
-        while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) { --j; }
-        if (j == 0) return static_cast<int>(i);
-        i += skip[static_cast<unsigned char>(haystack[i + needleLen - 1])];
-    }
-    return -1;
-}
-
-// Find ALL occurrences of needle in haystack using Boyer-Moore-Horspool.
-static std::vector<int> findAllBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLen,
-                                                         const BYTE* needle, size_t needleLen,
-                                                         ByteCompare cmp)
-{
-    std::vector<int> positions;
-    if (needleLen == 0 || needleLen > haystackLen) return positions;
-
-    constexpr size_t ALPHABET_SIZE = 256;
-    int skip[ALPHABET_SIZE];
-    for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
-    for (size_t i = 0; i < needleLen - 1; ++i) {
-        skip[static_cast<unsigned char>(needle[i])] = static_cast<int>(needleLen - 1 - i);
-    }
-
-    size_t i = 0;
-    while (i <= haystackLen - needleLen) {
-        size_t j = needleLen;
-        while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) { --j; }
-        if (j == 0) { positions.push_back(static_cast<int>(i)); i += needleLen; }
-        else { i += skip[static_cast<unsigned char>(haystack[i + needleLen - 1])]; }
-    }
-    return positions;
-}
-
-// Find all occurrences of a hex pattern (with optional wildcards) using sliding window.
-static std::vector<int> findAllWithWildcards(const BYTE* haystack, size_t haystackLen, const HexPattern& pattern)
-{
-    std::vector<int> positions;
-    if (pattern.bytes.empty() || pattern.isWildcard.size() != pattern.bytes.size()) return positions;
-
-    int needleLen = static_cast<int>(pattern.bytes.size());
-    if (needleLen > static_cast<int>(haystackLen)) return positions;
-
-    // Check for at least one non-wildcard byte (all-wildcards is degenerate)
-    bool hasNonWildcard = false;
-    for (bool isW : pattern.isWildcard) { if (!isW) { hasNonWildcard = true; break; } }
-    if (!hasNonWildcard) return positions;
-
-    // Sliding window with early exit on first mismatch — fast enough for small patterns
-    for (size_t i = 0; i <= haystackLen - needleLen; ++i) {
-        bool match = true;
-        for (int j = 0; j < needleLen && match; ++j) {
-            if (!pattern.isWildcard[j] && haystack[i + j] != pattern.bytes[j]) {
-                match = false;
-            }
-        }
-        if (match) { positions.push_back(static_cast<int>(i)); i += needleLen - 1; }
-    }
-    return positions;
-}
-
-// Legacy naive search removed — replaced by BMH in search_chunk().
 
 static void print_row_stream(const file_info& fi)
 {
@@ -175,6 +51,26 @@ static void status_update(const std::string& text)
     last_len = msg.size();
 }
 
+// Determine whether the PE buffer is 32-bit or 64-bit.
+static bool peIs64bit(const BYTE* buf)
+{
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) return false;
+
+    LONG peOffset = idh->e_lfanew;
+    if (peOffset < 0 || static_cast<DWORD>(peOffset + sizeof(DWORD)) > static_cast<DWORD>(sizeof(IMAGE_NT_HEADERS64))) {
+        return false;
+    }
+
+    const DWORD* sig = reinterpret_cast<const DWORD*>(buf + peOffset);
+    if (*sig != IMAGE_NT_SIGNATURE) return false;
+
+    // Check machine type to determine 32 vs 64 bit
+    const BYTE* ntPtr = buf + peOffset;
+    const auto* fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(ntPtr + sizeof(DWORD));
+    return fileHdr->Machine == IMAGE_FILE_MACHINE_AMD64;
+}
+
 static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
 {
     LARGE_INTEGER fileSize{};
@@ -188,39 +84,47 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
     if (!ReadFile(hFile, outBuf.data(), readSize, &headerBytes, NULL)) return 0;
 
-    IMAGE_DOS_HEADER* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(outBuf.data());
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(outBuf.data());
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) return headerBytes;
 
     LONG peOffset = idh->e_lfanew;
+    // Validate PE offset is within bounds and has room for NT signature + file header
     if (peOffset < 0 || static_cast<DWORD>(peOffset + sizeof(DWORD)) > headerBytes) {
         const DWORD MAX_PE_HEADER = 64 * 1024;
-        readSize = static_cast<DWORD>(std::min<ULONGLONG>(fileSize.QuadPart, 
-                          std::max<ULONGLONG>(static_cast<ULONGLONG>(peOffset + MAX_PE_HEADER), MIN_HEADER)));
+        ULONGLONG neededSize = static_cast<ULONGLONG>(peOffset) + sizeof(IMAGE_NT_HEADERS64) 
+                               + (static_cast<ULONGLONG>(fileHdr->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER);
+        if (neededSize > fileSize.QuadPart) {
+            // File is too small, just return what we have
+            return headerBytes;
+        }
+        readSize = static_cast<DWORD>(std::min(fileSize.QuadPart, 
+                          std::max<ULONGLONG>(neededSize, MIN_HEADER)));
         outBuf.resize(readSize);
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
         if (!ReadFile(hFile, outBuf.data(), readSize, &headerBytes, NULL)) return 0;
-        idh = reinterpret_cast<IMAGE_DOS_HEADER*>(outBuf.data());
+        idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(outBuf.data());
         if (idh->e_magic != IMAGE_DOS_SIGNATURE) return headerBytes;
         peOffset = idh->e_lfanew;
     }
 
-    BYTE* ntSig = outBuf.data() + peOffset;
-    if (reinterpret_cast<DWORD*>(ntSig)[0] != IMAGE_NT_SIGNATURE) return headerBytes;
+    const BYTE* ntSigPtr = outBuf.data() + peOffset;
+    if (reinterpret_cast<const DWORD*>(ntSigPtr)[0] != IMAGE_NT_SIGNATURE) return headerBytes;
 
-    bool is64bit = false;
-    BYTE* ntHdr = outBuf.data() + peOffset;
-    if (reinterpret_cast<IMAGE_NT_HEADERS32*>(ntHdr)->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-        // 32-bit
-    } else if (reinterpret_cast<IMAGE_NT_HEADERS64*>(ntHdr)->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        is64bit = true;
+    // Determine 32-bit vs 64-bit properly before accessing optional header
+    bool is64b = false;
+    const auto* fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(ntSigPtr + sizeof(DWORD));
+    if (fileHdr->Machine == IMAGE_FILE_MACHINE_I386) {
+        // 32-bit — nothing special needed
+    } else if (fileHdr->Machine == IMAGE_FILE_MACHINE_AMD64) {
+        is64b = true;
     }
 
     DWORD sizeOfHeaders = 0;
-    if (is64bit) {
-        auto* nthdr = reinterpret_cast<IMAGE_NT_HEADERS64*>(ntHdr);
+    if (is64b) {
+        const auto* nthdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ntSigPtr);
         sizeOfHeaders = nthdr->OptionalHeader.SizeOfHeaders;
     } else {
-        auto* nthdr = reinterpret_cast<IMAGE_NT_HEADERS32*>(ntHdr);
+        const auto* nthdr = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ntSigPtr);
         sizeOfHeaders = nthdr->OptionalHeader.SizeOfHeaders;
     }
 
@@ -232,17 +136,15 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
         if (!ReadFile(hFile, outBuf.data(), needed, &headerBytes, NULL)) return 0;
     }
 
-    BYTE* sig = outBuf.data() + peOffset;
-    auto* fileHdr = is64bit 
-        ? &(reinterpret_cast<IMAGE_NT_HEADERS64*>(sig)->FileHeader)
-        : &(reinterpret_cast<IMAGE_NT_HEADERS32*>(sig)->FileHeader);
-
-    DWORD secNeeded = static_cast<DWORD>(peOffset + sizeof(IMAGE_NT_HEADERS64) + 
-                          fileHdr->NumberOfSections * IMAGE_SIZEOF_SECTION_HEADER);
-    if (secNeeded > headerBytes && secNeeded <= static_cast<DWORD>(fileSize.QuadPart)) {
-        outBuf.resize(secNeeded);
+    // Ensure we have enough data for section headers
+    const BYTE* sig = outBuf.data() + peOffset;
+    const auto* fh = reinterpret_cast<const IMAGE_FILE_HEADER*>(sig + sizeof(DWORD));
+    ULONGLONG secNeeded = static_cast<ULONGLONG>(peOffset) + sizeof(IMAGE_NT_HEADERS64) + 
+                          static_cast<ULONGLONG>(fh->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER;
+    if (secNeeded > headerBytes && secNeeded <= static_cast<ULONGLONG>(fileSize.QuadPart)) {
+        outBuf.resize(static_cast<DWORD>(secNeeded));
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
-        if (!ReadFile(hFile, outBuf.data(), secNeeded, &headerBytes, NULL)) return 0;
+        if (!ReadFile(hFile, outBuf.data(), static_cast<DWORD>(secNeeded), &headerBytes, NULL)) return 0;
     }
 
     return headerBytes;
@@ -282,19 +184,17 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
                           const HexPattern* hexPat = nullptr)
 {
     if (hexPat != nullptr && !hexPat->bytes.empty()) {
-        // Hex/wildcard pattern mode
+        // Hex/wildcard pattern mode — delegate to algo.h implementations
         bool hasWildcards = false;
         for (bool isW : hexPat->isWildcard) { if (isW) { hasWildcards = true; break; } }
 
         if (!hasWildcards) {
-            // No wildcards — use fast BMH directly on byte array
-            auto positions = findAllBytesBoyerMooreHorspool(
+            auto positions = find_all_bmh(
                 chunk, chunkLen, hexPat->bytes.data(), static_cast<size_t>(hexPat->bytes.size()),
-                [](BYTE a, BYTE b) { return a == b; });
+                [](uint8_t a, uint8_t b) { return a == b; });
             for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
         } else {
-            // Has wildcards — use sliding window comparison
-            auto positions = findAllWithWildcards(chunk, chunkLen, *hexPat);
+            auto positions = find_all_with_wildcards(chunk, chunkLen, *hexPat);
             for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
         }
     } else if (isUnicode && caseInsensitive) {
@@ -306,23 +206,31 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
         memcpy(patLower.data(), needle, needleLen);
         CharLowerBuffW(patLower.data(), static_cast<UINT>(wLen));
 
-        size_t chunkWLen = chunkLen / sizeof(WCHAR);
-        std::vector<WCHAR> chunkLower(chunkWLen);
-        memcpy(chunkLower.data(), chunk, 
-               (chunkLen < chunkWLen * sizeof(WCHAR)) ? chunkLen : chunkWLen * sizeof(WCHAR));
-        CharLowerBuffW(chunkLower.data(), static_cast<UINT>(chunkWLen));
+        // FIX: Allocate chunkLower in WCHARs and copy only the correct number of bytes.
+        size_t chunkByteLen = chunkLen;  // total bytes to process from chunk
+        size_t chunkWLenActual = chunkByteLen / sizeof(WCHAR);  // actual wide-char count
+        std::vector<WCHAR> chunkLower(chunkWLenActual);
 
-        auto positions = findAllBytesBoyerMooreHorspool(
-            reinterpret_cast<const BYTE*>(chunkLower.data()), chunkLen,
-            reinterpret_cast<const BYTE*>(patLower.data()), needleLen,
-            [](BYTE a, BYTE b) { return a == b; });
+        // Copy only the bytes that fit into our WCHAR buffer — no overflow.
+        size_t copyBytes = (chunkByteLen < chunkWLenActual * sizeof(WCHAR)) 
+                           ? chunkByteLen : chunkWLenActual * sizeof(WCHAR);
+        memcpy(chunkLower.data(), chunk, copyBytes);
+
+        // Only lowercase the portion we actually copied.
+        CharLowerBuffW(chunkLower.data(), static_cast<UINT>(chunkWLenActual));
+
+        auto positions = find_all_bmh(
+            reinterpret_cast<const uint8_t*>(chunkLower.data()), 
+            chunkWLenActual * sizeof(WCHAR),
+            reinterpret_cast<const uint8_t*>(patLower.data()), needleLen,
+            [](uint8_t a, uint8_t b) { return a == b; });
         for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
     } else {
         // Standard BMH search with optional case-insensitive predicate
         ByteCompare cmp = caseInsensitive ? bytesEqualCI : 
                           [](BYTE a, BYTE b) { return a == b; };
 
-        auto positions = findAllBytesBoyerMooreHorspool(
+        auto positions = find_all_bmh(
             chunk, chunkLen, needle, static_cast<size_t>(needleLen), cmp);
         for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
     }
@@ -445,13 +353,18 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         // Count mode: one entry per file with total match count
         DWORD64 firstOffset = allOffsets[0];
         int sectionIndex = 0;
+        // FIX: Pass DWORD64 directly — no truncation to int.
         PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes, 
-                                                             static_cast<int>(firstOffset), sectionIndex);
+                                                             firstOffset, sectionIndex);
 
         file_info fi;
         fi.filepath = pathTosearch;
         char countStr[32];
+#ifdef _MSC_VER
         sprintf_s(countStr, "%d", static_cast<int>(allOffsets.size()));
+#else
+        snprintf(countStr, sizeof(countStr), "%d", static_cast<int>(allOffsets.size()));
+#endif
         fi.stringTosearch = countStr;  // store match count for display
 
         if (sectionHeader != NULL) {
@@ -472,8 +385,9 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         // Normal mode: one entry per match (existing behavior)
         for (DWORD64 globalOffset : allOffsets) {
             int sectionIndex = 0;
+            // FIX: Pass DWORD64 directly — no truncation to int.
             PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes, 
-                                                                 static_cast<int>(globalOffset), sectionIndex);
+                                                                 globalOffset, sectionIndex);
 
             add_match(pathTosearch, globalOffset, sectionIndex, sectionHeader,
                       stringTosearch, isPE, all_file_info, stream);
@@ -514,5 +428,3 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
         }
     }
 }
-
-

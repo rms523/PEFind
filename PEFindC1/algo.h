@@ -282,13 +282,12 @@ inline std::vector<uint8_t> create_test_pe(size_t file_size,
     opt_hdr->SizeOfHeaders = static_cast<DWORD>(aligned_headers);
     
     // Write section headers
-    const uint8_t* sec_ptr = reinterpret_cast<uint8_t*>(opt_hdr) + file_hdr->SizeOfOptionalHeader;
+    uint8_t* sec_ptr = reinterpret_cast<uint8_t*>(opt_hdr) + file_hdr->SizeOfOptionalHeader;
     for (size_t i = 0; i < sections.size(); ++i, 
          sec_ptr += IMAGE_SIZEOF_SECTION_HEADER) {
         auto* section = reinterpret_cast<IMAGE_SECTION_HEADER*>(sec_ptr);
-        // Section name: ".text", ".rdata", etc.
-        const char names[][8] = {".text\0\0\0\0", ".rdata\0\0", ".data\0\0\0", ".rsrc\0\0", 
-                                  ".reloc\0\0"};
+        // Section name: ".text", ".rdata", etc. — copy up to 7 chars (8th byte zeroed by memset above)
+        const char* names[] = {".text", ".rdata", ".data", ".rsrc", ".reloc"};
         size_t name_len = std::min(strlen(names[i < 5 ? i : 4]), static_cast<size_t>(7));
         memcpy(section->Name, names[i < 5 ? i : 4], name_len);
         

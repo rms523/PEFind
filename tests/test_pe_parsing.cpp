@@ -230,7 +230,7 @@ TEST(PeBufferCreation, SectionNames) {
     ASSERT_NE(sec0, nullptr);
     ASSERT_NE(sec1, nullptr);
     // First section should be ".text"
-    EXPECT_EQ(strncmp(reinterpret_cast<char*>(sec0->Name), ".text", 5), 0);
+    EXPECT_EQ(strncmp(sec0->Name, ".text", 5), 0);
 }
 
 TEST(PeBufferCreation, LargeFile) {

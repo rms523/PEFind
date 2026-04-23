@@ -8,9 +8,10 @@ BYTE* get_nt_hrds(const BYTE* pe_buffer)
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
         return NULL;
     }
-    const LONG kMaxOffset = 1024;
+    // Allow e_lfanew up to 64KB — real PE files can have NT headers far beyond offset 1024
+    const LONG kMaxOffset = 65536;
     LONG pe_offset = idh->e_lfanew;
-    if (pe_offset > kMaxOffset) return NULL;
+    if (pe_offset < 0 || pe_offset > kMaxOffset) return NULL;
     BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + pe_offset;
     if (reinterpret_cast<const DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
     return nt_ptr;
@@ -30,12 +31,12 @@ IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
 
 IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
 {
-    BYTE* ptr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
+    const BYTE* ptr = get_nt_hrds(pe_buffer);
     if (ptr == NULL) return NULL;
 
     auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
     if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        return reinterpret_cast<IMAGE_NT_HEADERS64*>(const_cast<BYTE*>(pe_buffer));
+        return const_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<const IMAGE_NT_HEADERS64*>(pe_buffer));
     }
     return NULL;
 }
@@ -85,35 +86,36 @@ ULONGLONG get_module_base(const BYTE* pe_buffer)
     return static_cast<ULONGLONG>(nthdr32->OptionalHeader.ImageBase);
 }
 
-// FIX #1: Properly iterate section headers using struct array indexing instead of raw pointer arithmetic.
-PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_size, int globalOffset, int &sectionIndex)
+// Get the section header that contains a given file offset.
+// Uses DWORD64 for globalOffset to correctly handle files larger than 4 GB.
+PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_size, DWORD64 globalOffset, int &sectionIndex)
 {
     if (payload == NULL) return NULL;
 
     bool is64b = is64bit(payload);
 
-    BYTE* nt_hdr = const_cast<BYTE*>(get_nt_hrds(payload));
+    const BYTE* nt_hdr = get_nt_hrds(payload);
     if (nt_hdr == NULL) {
         return NULL;
     }
 
     // Validate we have enough data for the file header
-    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), payload, sizeof(IMAGE_FILE_HEADER))) {
+    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), nt_hdr, sizeof(IMAGE_FILE_HEADER))) {
         return NULL;
     }
 
-    IMAGE_FILE_HEADER* fileHdr = nullptr;
+    const IMAGE_FILE_HEADER* fileHdr = nullptr;
     DWORD hdrsSize = 0;
     const BYTE* secPtr = nullptr;
 
     if (is64b) {
         auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(nt_hdr);
-        fileHdr = &const_cast<IMAGE_FILE_HEADER&>(nthdr64->FileHeader);
+        fileHdr = &nthdr64->FileHeader;
         hdrsSize = nthdr64->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
     } else {
         auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(nt_hdr);
-        fileHdr = &const_cast<IMAGE_FILE_HEADER&>(nthdr32->FileHeader);
+        fileHdr = &nthdr32->FileHeader;
         hdrsSize = nthdr32->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
     }
@@ -122,7 +124,7 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
         return NULL;
     }
 
-    // FIX #1: Use proper struct array indexing instead of raw pointer arithmetic.
+    // Iterate section headers using proper struct array indexing.
     const size_t secSize = sizeof(IMAGE_SECTION_HEADER);
 
     for (int numberOfSections = 0; numberOfSections < fileHdr->NumberOfSections; ++numberOfSections) {
@@ -133,12 +135,12 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
             return NULL;
         }
 
-        DWORD rawAddress = section->PointerToRawData;
-        DWORD rawSize = section->SizeOfRawData;
+        DWORD64 rawAddress = section->PointerToRawData;
+        DWORD64 rawSize    = section->SizeOfRawData;
 
-        // Check if the global offset falls within this section's raw data range
-        if (rawAddress <= static_cast<DWORD>(globalOffset) && 
-            static_cast<DWORD>(globalOffset) <= (rawAddress + rawSize)) {
+        // Check if the global offset falls within this section's raw data range.
+        // Use 64-bit arithmetic to avoid overflow on large files.
+        if (rawAddress <= globalOffset && globalOffset < (rawAddress + rawSize)) {
             sectionIndex = numberOfSections;
             return const_cast<IMAGE_SECTION_HEADER*>(section);
         }

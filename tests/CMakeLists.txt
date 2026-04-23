@@ -11,7 +11,7 @@ add_executable(test_algorithms
     test_pe_parsing.cpp
 )
 
-target_include_directories(test_algorithms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(test_algorithms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../PEFindC1)
 target_link_libraries(test_algorithms PRIVATE gtest gtest_main)
 
 # Register tests with CTest
