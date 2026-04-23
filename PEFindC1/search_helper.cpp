@@ -77,34 +77,39 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     if (!GetFileSizeEx(hFile, &fileSize)) return 0;
 
     const DWORD MIN_HEADER = 1024;
+    const DWORD MAX_PE_HEADER = 64 * 1024;
     DWORD readSize = static_cast<DWORD>(std::min<ULONGLONG>(fileSize.QuadPart, MIN_HEADER));
+    if (readSize == 0) return 0;
+
     outBuf.resize(readSize);
     DWORD headerBytes = 0;
     LARGE_INTEGER zero{}; zero.QuadPart = 0;
     SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
     if (!ReadFile(hFile, outBuf.data(), readSize, &headerBytes, NULL)) return 0;
+    if (headerBytes < sizeof(IMAGE_DOS_HEADER)) return headerBytes;
 
     const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(outBuf.data());
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) return headerBytes;
 
     LONG peOffset = idh->e_lfanew;
-    // Validate PE offset is within bounds and has room for NT signature + file header
-    if (peOffset < 0 || static_cast<DWORD>(peOffset + sizeof(DWORD)) > headerBytes) {
-        const DWORD MAX_PE_HEADER = 64 * 1024;
-        ULONGLONG neededSize = static_cast<ULONGLONG>(peOffset) + sizeof(IMAGE_NT_HEADERS64) 
-                               + (static_cast<ULONGLONG>(fileHdr->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER);
-        if (neededSize > fileSize.QuadPart) {
-            // File is too small, just return what we have
-            return headerBytes;
-        }
-        readSize = static_cast<DWORD>(std::min(fileSize.QuadPart, 
-                          std::max<ULONGLONG>(neededSize, MIN_HEADER)));
+    if (peOffset < 0) return headerBytes;
+
+    // Ensure the NT signature and file header are available before reading fields from them.
+    ULONGLONG ntHeaderMinimum = static_cast<ULONGLONG>(peOffset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
+    if (ntHeaderMinimum > headerBytes) {
+        readSize = static_cast<DWORD>(std::min<ULONGLONG>(
+            fileSize.QuadPart,
+            std::max<ULONGLONG>(ntHeaderMinimum, MIN_HEADER)));
+        if (readSize > MAX_PE_HEADER) return headerBytes;
+
         outBuf.resize(readSize);
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
         if (!ReadFile(hFile, outBuf.data(), readSize, &headerBytes, NULL)) return 0;
+        if (ntHeaderMinimum > headerBytes) return headerBytes;
         idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(outBuf.data());
         if (idh->e_magic != IMAGE_DOS_SIGNATURE) return headerBytes;
         peOffset = idh->e_lfanew;
+        if (peOffset < 0) return headerBytes;
     }
 
     const BYTE* ntSigPtr = outBuf.data() + peOffset;
@@ -119,6 +124,20 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
         is64b = true;
     }
 
+    ULONGLONG ntHeaderSize = sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + fileHdr->SizeOfOptionalHeader;
+    ULONGLONG sectionTableEnd = static_cast<ULONGLONG>(peOffset) + ntHeaderSize +
+                                static_cast<ULONGLONG>(fileHdr->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER;
+    if (sectionTableEnd > headerBytes) {
+        ULONGLONG neededSize = std::min<ULONGLONG>(fileSize.QuadPart, sectionTableEnd);
+        if (neededSize > MAX_PE_HEADER) return headerBytes;
+        outBuf.resize(static_cast<DWORD>(neededSize));
+        SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
+        if (!ReadFile(hFile, outBuf.data(), static_cast<DWORD>(neededSize), &headerBytes, NULL)) return 0;
+        if (sectionTableEnd > headerBytes) return headerBytes;
+        ntSigPtr = outBuf.data() + peOffset;
+        fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(ntSigPtr + sizeof(DWORD));
+    }
+
     DWORD sizeOfHeaders = 0;
     if (is64b) {
         const auto* nthdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ntSigPtr);
@@ -131,17 +150,20 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     if (sizeOfHeaders > 0 && static_cast<DWORD>(sizeOfHeaders) > headerBytes) {
         DWORD needed = static_cast<DWORD>(std::min<ULONGLONG>(fileSize.QuadPart, 
                         std::max<ULONGLONG>(static_cast<ULONGLONG>(sizeOfHeaders), MIN_HEADER)));
+        if (needed > MAX_PE_HEADER) return headerBytes;
         outBuf.resize(needed);
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
         if (!ReadFile(hFile, outBuf.data(), needed, &headerBytes, NULL)) return 0;
     }
 
-    // Ensure we have enough data for section headers
+    // Ensure we have enough data for section headers.
     const BYTE* sig = outBuf.data() + peOffset;
     const auto* fh = reinterpret_cast<const IMAGE_FILE_HEADER*>(sig + sizeof(DWORD));
-    ULONGLONG secNeeded = static_cast<ULONGLONG>(peOffset) + sizeof(IMAGE_NT_HEADERS64) + 
+    ULONGLONG secNeeded = static_cast<ULONGLONG>(peOffset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) +
+                          fh->SizeOfOptionalHeader +
                           static_cast<ULONGLONG>(fh->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER;
     if (secNeeded > headerBytes && secNeeded <= static_cast<ULONGLONG>(fileSize.QuadPart)) {
+        if (secNeeded > MAX_PE_HEADER) return headerBytes;
         outBuf.resize(static_cast<DWORD>(secNeeded));
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
         if (!ReadFile(hFile, outBuf.data(), static_cast<DWORD>(secNeeded), &headerBytes, NULL)) return 0;

@@ -10,7 +10,7 @@ bool validate_ptr(const void* buffer_bgn, SIZE_T buffer_size, const void* field_
     if ((ULONGLONG)field_bgn < start) {
         return false;
     }
-    if (field_end >= end) {
+    if (field_end > end) {
         return false;
     }
     return true;

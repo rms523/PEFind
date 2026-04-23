@@ -57,7 +57,7 @@ TEST(BMHSearch, SingleByteNeedle) {
     const uint8_t haystack[] = {'a', 'b', 'c', 'b', 'd'};
     
     int pos = search_bmh(haystack, 5, &haystack[3], 1, [](uint8_t a, uint8_t b) { return a == b; });
-    EXPECT_EQ(pos, 3);
+    EXPECT_EQ(pos, 1);
 }
 
 TEST(BMHSearch, AllSameBytes) {
@@ -134,14 +134,13 @@ TEST(BMHFindAll, NeedleLongerThanHaystack) {
 }
 
 TEST(BMHFindAll, OverlappingPatternNonOverlappingResult) {
-    // Pattern "aaa" in "aaaaa": should find at positions 0 and 3 (non-overlapping)
+    // Pattern "aaa" in "aaaaa": non-overlapping search should find the first full occurrence only.
     const uint8_t haystack[] = {'a', 'a', 'a', 'a', 'a'};
     const uint8_t needle[]   = {'a', 'a', 'a'};
     
     auto positions = find_all_bmh(haystack, 5, needle, 3, [](uint8_t a, uint8_t b) { return a == b; });
-    ASSERT_EQ(positions.size(), 2u);
+    ASSERT_EQ(positions.size(), 1u);
     EXPECT_EQ(positions[0], 0);
-    EXPECT_EQ(positions[1], 3);
 }
 
 TEST(BMHFindAll, CaseSensitiveByDefault) {
@@ -149,8 +148,7 @@ TEST(BMHFindAll, CaseSensitiveByDefault) {
     const uint8_t needle[]   = {'a', 'b'};
     
     auto positions = find_all_bmh(haystack, 6, needle, 2, [](uint8_t a, uint8_t b) { return a == b; });
-    ASSERT_EQ(positions.size(), 1u);
-    EXPECT_EQ(positions[0], 3); // Only lowercase 'a' matches
+    EXPECT_TRUE(positions.empty());
 }
 
 TEST(BMHFindAll, MZHeaderSearch) {

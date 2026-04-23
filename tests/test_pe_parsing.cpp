@@ -24,6 +24,16 @@ TEST(PeParsing, InvalidDosSignature) {
 
 TEST(PeParsing, Valid32BitPE) {
     auto pe = create_test_pe(4096, {{512, 1024}});
+    auto* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(pe.data());
+    DWORD pe_offset = idh->e_lfanew;
+    auto* file_hdr = reinterpret_cast<IMAGE_FILE_HEADER*>(pe.data() + pe_offset + sizeof(DWORD));
+    file_hdr->Machine = IMAGE_FILE_MACHINE_I386;
+    file_hdr->SizeOfOptionalHeader = static_cast<WORD>(sizeof(IMAGE_OPTIONAL_HEADER32));
+    auto* opt_hdr = reinterpret_cast<IMAGE_OPTIONAL_HEADER32*>(
+        reinterpret_cast<uint8_t*>(file_hdr) + sizeof(IMAGE_FILE_HEADER));
+    opt_hdr->Magic = IMAGE_NT_OPTIONAL_HDR_MAGIC32;
+    opt_hdr->SizeOfHeaders = 512;
+
     auto info = parse_pe_header(pe.data(), pe.size());
 
     ASSERT_TRUE(info.is_valid);
@@ -160,7 +170,7 @@ TEST(PeSectionLookup, OffsetAtBoundaryEnd) {
 
     auto info = parse_pe_header(pe.data(), pe.size());
     int idx = find_section_for_offset(pe.data(), pe.size(), info.e_lfanew, 512 + 1024); // At end of section 0
-    EXPECT_EQ(idx, 0);
+    EXPECT_EQ(idx, -1);
 }
 
 TEST(PeSectionLookup, OffsetNotInAnySection) {

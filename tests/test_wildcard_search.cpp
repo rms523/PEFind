@@ -137,7 +137,7 @@ TEST(WildcardSearch, OverlappingMatches) {
 TEST(WildcardSearch, LargeHaystack) {
     // Create a large buffer with pattern at the end
     std::vector<uint8_t> haystack(10000, 0xAB);
-    haystack[9998] = 0x5A; // xx 5A at position 9998
+    haystack[9998] = 0x5A; // xx 5A starts at position 9997
 
     HexPattern pattern;
     pattern.bytes     = {0x00, 0x5A};
@@ -145,7 +145,7 @@ TEST(WildcardSearch, LargeHaystack) {
 
     auto positions = find_all_with_wildcards(haystack.data(), haystack.size(), pattern);
     ASSERT_EQ(positions.size(), 1u);
-    EXPECT_EQ(positions[0], 9998);
+    EXPECT_EQ(positions[0], 9997);
 }
 
 TEST(WildcardSearch, WildcardInMiddle) {

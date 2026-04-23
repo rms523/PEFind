@@ -64,7 +64,7 @@ TEST(CaseInsensitiveBMH, SingleMatchUppercasePattern) {
 
 TEST(CaseInsensitiveBMH, MixedCaseMatch) {
     const uint8_t haystack[] = {'H', 'e', 'L', 'l', 'O'};
-    const uint8_t needle[]   = {'h', 'E', 'l', 'o'}; // partial match — only 4 bytes
+    const uint8_t needle[]   = {'h', 'E', 'l', 'L'}; // partial match — only 4 bytes
 
     int pos = search_bmh(haystack, 5, needle, 4, bytes_equal_ci);
     EXPECT_EQ(pos, 0);

@@ -36,7 +36,7 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
 
     auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
     if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        return const_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<const IMAGE_NT_HEADERS64*>(pe_buffer));
+        return const_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<const IMAGE_NT_HEADERS64*>(ptr));
     }
     return NULL;
 }

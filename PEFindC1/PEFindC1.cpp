@@ -15,7 +15,7 @@ using std::endl;
 enum SearchMode { SM_ASCII = 1, SM_UNICODE = 2 };
 
 struct CliArgs {
-    SearchMode mode = SM_ASCII | SM_UNICODE; // default: both
+    int mode = SM_ASCII | SM_UNICODE; // default: both
     int sortPredicate = -1;       // -1 = no sorting
     bool caseInsensitive = false; // -ci / --nocase flag
     bool countMode = false;       // -c / --count flag
@@ -293,8 +293,8 @@ int main(int argc, char** argv)
                     FALSE, args.countMode, &hexPat);  // caseInsensitive doesn't apply to hex mode
     } else {
         // Text search mode: use -a/-u flags as before
-        bool doAscii = (static_cast<int>(args.mode) & static_cast<int>(SM_ASCII)) != 0;
-        bool doUnicode = (static_cast<int>(args.mode) & static_cast<int>(SM_UNICODE)) != 0;
+        bool doAscii = (args.mode & static_cast<int>(SM_ASCII)) != 0;
+        bool doUnicode = (args.mode & static_cast<int>(SM_UNICODE)) != 0;
 
         if (!isDir && !doAscii && !doUnicode) {
             cout << "Please specify at least one search mode: -a, -u, or -au." << endl;

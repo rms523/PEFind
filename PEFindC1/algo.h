@@ -71,6 +71,18 @@ inline bool bytes_equal_ci(uint8_t a, uint8_t b) {
 // Boyer-Moore-Horspool search — O(n/m) average case.
 using ByteCompare = bool(*)(uint8_t, uint8_t);
 
+inline void build_bmh_skip_table(const uint8_t* needle, size_t needleLen, ByteCompare cmp,
+                                 int (&skip)[256]) {
+    for (size_t c = 0; c < 256; ++c) {
+        skip[c] = static_cast<int>(needleLen);
+        for (size_t i = 0; i + 1 < needleLen; ++i) {
+            if (cmp(static_cast<uint8_t>(c), needle[i])) {
+                skip[c] = static_cast<int>(needleLen - 1 - i);
+            }
+        }
+    }
+}
+
 inline int search_bmh(const uint8_t* haystack, size_t haystackLen,
                       const uint8_t* needle, size_t needleLen,
                       ByteCompare cmp) {
@@ -78,10 +90,7 @@ inline int search_bmh(const uint8_t* haystack, size_t haystackLen,
 
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
-    for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
-    for (size_t i = 0; i < needleLen - 1; ++i) {
-        skip[static_cast<uint8_t>(needle[i])] = static_cast<int>(needleLen - 1 - i);
-    }
+    build_bmh_skip_table(needle, needleLen, cmp, skip);
 
     size_t i = 0;
     while (i <= haystackLen - needleLen) {
@@ -102,10 +111,7 @@ inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen
 
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
-    for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
-    for (size_t i = 0; i < needleLen - 1; ++i) {
-        skip[static_cast<uint8_t>(needle[i])] = static_cast<int>(needleLen - 1 - i);
-    }
+    build_bmh_skip_table(needle, needleLen, cmp, skip);
 
     size_t i = 0;
     while (i <= haystackLen - needleLen) {
@@ -171,8 +177,11 @@ inline PeInfo parse_pe_header(const uint8_t* buf, size_t buf_size) {
     
     const auto* sig = reinterpret_cast<const DWORD*>(buf + pe_offset);
     if (*sig != IMAGE_NT_SIGNATURE) return info;
-    
-    info.is_valid = true;
+
+    if (static_cast<size_t>(pe_offset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) > buf_size) {
+        return info;
+    }
+
     info.e_lfanew = static_cast<DWORD>(pe_offset);
     
     // Check machine type to determine 32 vs 64 bit
@@ -180,16 +189,21 @@ inline PeInfo parse_pe_header(const uint8_t* buf, size_t buf_size) {
     info.machine = file_hdr->Machine;
     info.num_sections = file_hdr->NumberOfSections;
     
+    const uint8_t* optional_header = reinterpret_cast<const uint8_t*>(file_hdr) + sizeof(IMAGE_FILE_HEADER);
+    if (optional_header + file_hdr->SizeOfOptionalHeader > buf + buf_size) return info;
+
     if (file_hdr->Machine == IMAGE_FILE_MACHINE_I386) {
+        if (file_hdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER32)) return info;
         info.is_64bit = false;
-        const auto* opt_hdr32 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER32*>(
-            reinterpret_cast<const uint8_t*>(file_hdr) + file_hdr->SizeOfOptionalHeader);
+        const auto* opt_hdr32 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER32*>(optional_header);
         info.size_of_headers = opt_hdr32->SizeOfHeaders;
+        info.is_valid = true;
     } else if (file_hdr->Machine == IMAGE_FILE_MACHINE_AMD64) {
+        if (file_hdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64)) return info;
         info.is_64bit = true;
-        const auto* opt_hdr64 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER64*>(
-            reinterpret_cast<const uint8_t*>(file_hdr) + file_hdr->SizeOfOptionalHeader);
+        const auto* opt_hdr64 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER64*>(optional_header);
         info.size_of_headers = opt_hdr64->SizeOfHeaders;
+        info.is_valid = true;
     }
     
     return info;
@@ -199,9 +213,12 @@ inline PeInfo parse_pe_header(const uint8_t* buf, size_t buf_size) {
 inline const IMAGE_SECTION_HEADER* get_section_at(const uint8_t* buf, size_t buf_size, 
                                                    DWORD pe_offset, int index) {
     if (index < 0) return nullptr;
+    if (static_cast<size_t>(pe_offset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) > buf_size) return nullptr;
     
     const auto* file_hdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(buf + pe_offset + sizeof(DWORD));
-    const uint8_t* sec_ptr = reinterpret_cast<const uint8_t*>(file_hdr) + file_hdr->SizeOfOptionalHeader;
+    const uint8_t* sec_ptr = reinterpret_cast<const uint8_t*>(file_hdr) +
+                             sizeof(IMAGE_FILE_HEADER) + file_hdr->SizeOfOptionalHeader;
+    if (sec_ptr > buf + buf_size) return nullptr;
     
     for (int i = 0; i < file_hdr->NumberOfSections && i <= index; ++i, 
          sec_ptr += IMAGE_SIZEOF_SECTION_HEADER) {
@@ -218,8 +235,12 @@ inline const IMAGE_SECTION_HEADER* get_section_at(const uint8_t* buf, size_t buf
 // Find which section contains a given file offset.
 inline int find_section_for_offset(const uint8_t* buf, size_t buf_size, 
                                     DWORD pe_offset, DWORD file_offset) {
+    if (static_cast<size_t>(pe_offset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) > buf_size) return -1;
+
     const auto* file_hdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(buf + pe_offset + sizeof(DWORD));
-    const uint8_t* sec_ptr = reinterpret_cast<const uint8_t*>(file_hdr) + file_hdr->SizeOfOptionalHeader;
+    const uint8_t* sec_ptr = reinterpret_cast<const uint8_t*>(file_hdr) +
+                             sizeof(IMAGE_FILE_HEADER) + file_hdr->SizeOfOptionalHeader;
+    if (sec_ptr > buf + buf_size) return -1;
     
     for (int i = 0; i < file_hdr->NumberOfSections; ++i, 
          sec_ptr += IMAGE_SIZEOF_SECTION_HEADER) {
@@ -230,7 +251,7 @@ inline int find_section_for_offset(const uint8_t* buf, size_t buf_size,
         DWORD raw_addr = section->PointerToRawData;
         DWORD raw_size = section->SizeOfRawData;
         
-        if (raw_addr <= file_offset && file_offset <= raw_addr + raw_size) {
+        if (raw_addr <= file_offset && file_offset < raw_addr + raw_size) {
             return i;
         }
     }
