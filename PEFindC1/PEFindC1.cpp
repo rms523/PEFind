@@ -17,6 +17,7 @@ enum class SearchMode { Ascii = 1, Unicode = 2 };
 struct CliArgs {
     SearchMode mode = SearchMode::Ascii | SearchMode::Unicode; // default: both
     int sortPredicate = -1;       // -1 = no sorting
+    bool caseInsensitive = false; // -ci / --nocase flag
     string targetPath;            // directory or file path
     string searchString;          // the string to search for
 };
@@ -28,6 +29,7 @@ void info_banner()
     cout << "  -a or --ascii                           search for ASCII string" << endl;
     cout << "  -u or --unicode                         search for Unicode string" << endl;
     cout << "  -au or --both                           search for both ASCII and Unicode strings (default)" << endl;
+    cout << "  -ci or --nocase                         case-insensitive search" << endl;
     cout << "  -s <n> or --sort <n>                    sort results by predicate:" << endl;
     cout << "      0 = filepath, 1 = fileOffset, 2 = sectionIndex," << endl;
     cout << "      3 = sectionOffset, 4 = sectionName, 5 = isPE" << endl;
@@ -35,8 +37,9 @@ void info_banner()
     cout << endl;
     cout << "Examples:" << endl;
     cout << "  PEFindC1.exe -u E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -a -s 1 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -au -s 2 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFindC1.exe -a -ci E:\\tmp \"setup\"" << endl;
+    cout << "  PEFindC1.exe -au -s 1 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFindC1.exe -u -ci -s 2 E:\\tmp \"setup\"" << endl;
 }
 
 void banner()
@@ -105,19 +108,44 @@ void printfunction(const vector<file_info>& all_file_info)
     cout.flags(f);
 }
 
-BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
+// Forward declarations for case-insensitive-aware search dispatchers
+static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
+                            vector<file_info>& results, BOOL stream, BOOL ci);
+static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
+                           vector<file_info>& results, BOOL stream, BOOL ci);
+
+BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, 
+                 vector<file_info>& all_file_info, BOOL isDir, BOOL stream, BOOL caseInsensitive)
 {
-    if (checkFile(pathTosearch) == -1) {
+    if (checkFile(pathTosearch.c_str()) == -1) {
         return false;
     }
-    if (checkFile(pathTosearch) == 0) {
-        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, false, stream);
+    if (checkFile(pathTosearch.c_str()) == 0) {
+        checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive);
         return true;
-    } else if (checkFile(pathTosearch) == 1) {
-        searchString(pathTosearch, stringTosearch, isUnicode, all_file_info, true, stream);
+    } else if (checkFile(pathTosearch.c_str()) == 1) {
+        checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive);
         return true;
     }
     return false;
+}
+
+// File-level search with case-insensitive support
+static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
+                            vector<file_info>& results, BOOL stream, BOOL ci)
+{
+    searchStringinFile(path, str, isUnicode, results, stream, ci);
+}
+
+// Directory-level search with case-insensitive support (forwards ci to recursive calls)
+static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
+                           vector<file_info>& results, BOOL stream, BOOL ci)
+{
+    try {
+        searchStringInDir(dir, str, isUnicode, results, stream, ci);
+    } catch (std::exception const& e) {
+        std::cout << "Exception: " << e.what() << std::endl;
+    }
 }
 
 void sortfunction(vector<file_info>& all_file_info, int predicate)
@@ -157,6 +185,9 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
         else if (arg == "-au" || arg == "--both" || arg == "-ua") {
             out.mode = SearchMode::Ascii | SearchMode::Unicode;
         }
+        else if (arg == "-ci" || arg == "--nocase") {
+            out.caseInsensitive = true;
+        }
         else if ((arg == "-s" || arg == "--sort") && i + 1 < argc) {
             ++i; // consume next token as sort value
             out.sortPredicate = atoi(argv[i]);
@@ -189,24 +220,24 @@ int main(int argc, char** argv)
     bool doUnicode = (static_cast<int>(args.mode) & static_cast<int>(SearchMode::Unicode)) != 0;
 
     // Check if target is a file or directory
-    BOOL isDir = (checkFile(args.targetPath) == 1);
+    BOOL isDir = (checkFile(args.targetPath.c_str()) == 1);
 
     if (!isDir && !doAscii && !doUnicode) {
         cout << "Please specify at least one search mode: -a, -u, or -au." << endl;
         return 1;
     }
 
-    // Run searches — in streaming mode (no sort), results print as they're found.
+    // In streaming mode (no sort), results print as they're found.
     // In non-streaming mode (with sorting), we collect everything then print at the end.
     BOOL stream = (args.sortPredicate < 0);
 
     if (doAscii && doUnicode) {
-        checkString(args.targetPath, args.searchString, FALSE, all_file_info, stream);
-        checkString(args.targetPath, args.searchString, TRUE, all_file_info, stream);
+        checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir, stream, args.caseInsensitive);
+        checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir, stream, args.caseInsensitive);
     } else if (doAscii) {
-        checkString(args.targetPath, args.searchString, FALSE, all_file_info, stream);
+        checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir, stream, args.caseInsensitive);
     } else if (doUnicode) {
-        checkString(args.targetPath, args.searchString, TRUE, all_file_info, stream);
+        checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir, stream, args.caseInsensitive);
     }
 
     // Sort results if requested
@@ -215,8 +246,7 @@ int main(int argc, char** argv)
         sortfunction(all_file_info, args.sortPredicate);
         printfunction(all_file_info);
     } else if (!stream && !all_file_info.empty()) {
-        // No sorting but still non-streaming — shouldn't happen with current logic,
-        // but just in case: print header + results.
+        // No sorting but still non-streaming — print header + results.
         banner();
         size_t maxlen = 0;
         for (const auto& fi : all_file_info) {

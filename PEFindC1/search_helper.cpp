@@ -18,13 +18,20 @@ struct HandleGuard {
     HandleGuard& operator=(const HandleGuard&) = delete;
 };
 
-// Boyer-Moore-Horspool search — O(n/m) average case, much faster than naive for typical strings
+// Case-insensitive byte comparison helper for ASCII mode
+static bool bytesEqualCI(BYTE a, BYTE b) { return tolower(a) == tolower(b); }
+
+// Boyer-Moore-Horspool search — O(n/m) average case.
+// Supports optional case-insensitive matching via the compare predicate.
+using ByteCompare = bool(*)(BYTE, BYTE);
+
 static int searchBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLen,
-                                          const BYTE* needle, size_t needleLen)
+                                          const BYTE* needle, size_t needleLen,
+                                          ByteCompare cmp)
 {
     if (needleLen == 0 || needleLen > haystackLen) return -1;
 
-    // Build bad-character skip table
+    // Build bad-character skip table using the last byte of the needle
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
     for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
@@ -35,7 +42,8 @@ static int searchBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLe
     size_t i = 0;
     while (i <= haystackLen - needleLen) {
         size_t j = needleLen;
-        while (j > 0 && haystack[i + j - 1] == needle[j - 1]) {
+        // Compare from right to left using the provided predicate
+        while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) {
             --j;
         }
         if (j == 0) return static_cast<int>(i); // match found
@@ -47,13 +55,14 @@ static int searchBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLe
 // Find ALL occurrences of needle in haystack using Boyer-Moore-Horspool.
 // Returns a vector of byte offsets (within the haystack) for each match.
 static std::vector<int> findAllBytesBoyerMooreHorspool(const BYTE* haystack, size_t haystackLen,
-                                                         const BYTE* needle, size_t needleLen)
+                                                         const BYTE* needle, size_t needleLen,
+                                                         ByteCompare cmp)
 {
     std::vector<int> positions;
 
     if (needleLen == 0 || needleLen > haystackLen) return positions;
 
-    // Build bad-character skip table
+    // Build bad-character skip table using the last byte of the needle
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
     for (size_t c = 0; c < ALPHABET_SIZE; ++c) skip[c] = static_cast<int>(needleLen);
@@ -64,7 +73,7 @@ static std::vector<int> findAllBytesBoyerMooreHorspool(const BYTE* haystack, siz
     size_t i = 0;
     while (i <= haystackLen - needleLen) {
         size_t j = needleLen;
-        while (j > 0 && haystack[i + j - 1] == needle[j - 1]) {
+        while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) {
             --j;
         }
         if (j == 0) {
@@ -257,7 +266,53 @@ static void add_match(const string& pathTosearch, DWORD64 globalOffset, int sect
     }
 }
 
-void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
+// Search a single chunk for the pattern, handling case-insensitivity.
+// For ASCII: uses tolower() comparison directly in BMH.
+// For Unicode + CI: lowercases both pattern and haystack bytes using CharLowerBuffW before searching.
+static void search_chunk(const BYTE* chunk, size_t chunkLen,
+                          const BYTE* needle, int needleLen, BOOL isUnicode, BOOL caseInsensitive,
+                          ULONGLONG baseOffset, vector<DWORD64>& allOffsets)
+{
+    if (isUnicode && caseInsensitive) {
+        // For Unicode + case-insensitive: lowercase both pattern and chunk using CharLowerBuffW.
+        size_t wLen = static_cast<size_t>(needleLen / sizeof(WCHAR));
+        if (wLen == 0) return;
+
+        std::vector<WCHAR> patLower(wLen);
+        memcpy(patLower.data(), needle, needleLen);
+        CharLowerBuffW(patLower.data(), static_cast<UINT>(wLen));
+
+        // Lowercase the chunk too
+        size_t chunkWLen = chunkLen / sizeof(WCHAR);
+        std::vector<WCHAR> chunkLower(chunkWLen);
+        memcpy(chunkLower.data(), chunk, 
+               (chunkLen < chunkWLen * sizeof(WCHAR)) ? chunkLen : chunkWLen * sizeof(WCHAR));
+        CharLowerBuffW(chunkLower.data(), static_cast<UINT>(chunkWLen));
+
+        // Now search the lowercased versions with case-sensitive comparison
+        auto positions = findAllBytesBoyerMooreHorspool(
+            reinterpret_cast<const BYTE*>(chunkLower.data()), chunkLen,
+            reinterpret_cast<const BYTE*>(patLower.data()), needleLen,
+            [](BYTE a, BYTE b) { return a == b; });
+
+        for (int pos : positions) {
+            allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
+        }
+    } else {
+        // Standard BMH search with optional case-insensitive predicate
+        ByteCompare cmp = caseInsensitive ? bytesEqualCI : 
+                          [](BYTE a, BYTE b) { return a == b; };
+
+        auto positions = findAllBytesBoyerMooreHorspool(
+            chunk, chunkLen, needle, static_cast<size_t>(needleLen), cmp);
+
+        for (int pos : positions) {
+            allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
+        }
+    }
+}
+
+void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive)
 {
     HANDLE hHandle = CreateFile(pathTosearch.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
@@ -309,12 +364,16 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         pattern_len = (k - 1) * sizeof(WCHAR); // ignore last null for substring search
     } else {
         ascii_pat.assign(stringTosearch.begin(), stringTosearch.end());
+        if (caseInsensitive) {
+            // Lowercase the ASCII pattern once upfront
+            std::transform(ascii_pat.begin(), ascii_pat.end(), ascii_pat.begin(),
+                          [](BYTE b) { return static_cast<BYTE>(tolower(b)); });
+        }
         pattern = ascii_pat.data();
         pattern_len = static_cast<int>(ascii_pat.size());
     }
 
     // Stream through file in chunks with overlap to catch boundary matches.
-    // FIX #6: Find ALL occurrences, not just the first one.
     const DWORD CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
     const DWORD OVERLAP = (pattern_len > 0) ? static_cast<DWORD>(pattern_len - 1) : 0;
     std::vector<BYTE> buf(CHUNK_SIZE + OVERLAP);
@@ -323,6 +382,10 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     LARGE_INTEGER zero{}; zero.QuadPart = 0;
     SetFilePointerEx(hHandle, zero, NULL, FILE_BEGIN);
+
+    // Collect all match offsets first (needed for section lookup per offset)
+    vector<DWORD64> allOffsets;
+
     for (;;) {
         DWORD bytesRead = 0;
         if (!ReadFile(hHandle, buf.data() + overlap_len, CHUNK_SIZE, &bytesRead, NULL)) {
@@ -332,39 +395,35 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         if (bytesRead == 0) break; // EOF
 
         DWORD search_size = overlap_len + bytesRead;
+        size_t offsetsBeforeSearch = allOffsets.size();
 
-        // FIX #6: Find all matches in this chunk, not just the first.
-        auto positions = findAllBytesBoyerMooreHorspool(buf.data(), static_cast<size_t>(search_size), 
-                                                         pattern, static_cast<size_t>(pattern_len));
+        // Search this chunk for all pattern occurrences
+        search_chunk(buf.data(), static_cast<size_t>(search_size),
+                      pattern, pattern_len, isUnicode, caseInsensitive,
+                      base_offset, allOffsets);
 
-        for (int pos : positions) {
-            DWORD64 global_offset = base_offset + static_cast<DWORD64>(pos);
+        // Advance past the last match in this chunk (if any found)
+        if (allOffsets.size() > offsetsBeforeSearch) {
+            DWORD64 lastGlobal = allOffsets.back();
+            int lastChunkPos = static_cast<int>(lastGlobal - base_offset);
+            DWORD consumed = static_cast<DWORD>(lastChunkPos + pattern_len);
 
-            // Look up section info for this specific offset.
-            // We need to re-read the header buffer's PE info each time since get_section_hdr
-            // needs it. The function takes a local copy of the index.
-            int sectionIndex = 0;
-            PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes, 
-                                                                 static_cast<int>(global_offset), sectionIndex);
-
-            add_match(pathTosearch, global_offset, sectionIndex, sectionHeader,
-                      stringTosearch, isPE, all_file_info, stream);
-        }
-
-        // Move past the last match in this chunk to avoid re-scanning.
-        // If no matches, advance normally with overlap logic.
-        if (!positions.empty()) {
-            int lastPos = positions.back();
-            DWORD consumed = static_cast<DWORD>(lastPos + pattern_len);
-            // Keep any remaining bytes as new overlap for the next chunk
-            DWORD remaining = search_size - consumed;
-            if (remaining > 0 && remaining <= OVERLAP) {
-                memmove(buf.data(), buf.data() + consumed, remaining);
-                overlap_len = remaining;
+            if (consumed >= search_size) {
+                // Match extends beyond chunk boundary — use standard overlap
+                DWORD new_overlap = std::min<DWORD>(OVERLAP, search_size);
+                if (new_overlap > 0) {
+                    memmove(buf.data(), buf.data() + (search_size - new_overlap), new_overlap);
+                }
+                overlap_len = new_overlap;
             } else {
-                overlap_len = 0;
+                DWORD remaining = search_size - consumed;
+                if (remaining > 0 && remaining <= OVERLAP) {
+                    memmove(buf.data(), buf.data() + consumed, remaining);
+                    overlap_len = remaining;
+                } else {
+                    overlap_len = 0;
+                }
             }
-            base_offset += (search_size - overlap_len);
         } else {
             // No matches — standard overlap logic
             DWORD new_overlap = std::min<DWORD>(OVERLAP, search_size);
@@ -372,12 +431,24 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
                 memmove(buf.data(), buf.data() + (search_size - new_overlap), new_overlap);
             }
             overlap_len = new_overlap;
-            base_offset += (search_size - overlap_len);
         }
+        base_offset += (search_size - overlap_len);
+    }
+
+    // Now emit results — one entry per match, with section info looked up per offset
+    for (DWORD64 globalOffset : allOffsets) {
+        int sectionIndex = 0;
+        PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes, 
+                                                             static_cast<int>(globalOffset), sectionIndex);
+
+        add_match(pathTosearch, globalOffset, sectionIndex, sectionHeader,
+                  stringTosearch, isPE, all_file_info, stream);
     }
 }
 
-void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL stream)
+// FIX: searchStringInDir now accepts and forwards caseInsensitive flag for recursive calls.
+void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, 
+                        vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive)
 {
     WIN32_FIND_DATA findData;
     HANDLE hFind = INVALID_HANDLE_VALUE;
@@ -389,7 +460,7 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
         throw std::runtime_error("Invalid handle value! Please check your path...");
     }
 
-    // FIX #8: RAII guard for find handle — ensures cleanup even on exceptions
+    // RAII guard for find handle — ensures cleanup even on exceptions
     HandleGuard findGuard(hFind);
 
     while (FindNextFileA(hFind, &findData) != 0) {
@@ -401,11 +472,11 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
         PathAppend(combined_path, findData.cFileName);
 
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            // FIX #4: Recurse into subdirectories
-            searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info, stream);
+            // Recurse into subdirectories, forwarding caseInsensitive flag
+            searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive);
         } else {
             if (!stream) status_update(combined_path);
-            searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info, stream);
+            searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive);
         }
     }
 
