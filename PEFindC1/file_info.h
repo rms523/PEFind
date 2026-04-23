@@ -4,10 +4,17 @@ using std::string;
 
 struct file_info {
     string filepath;
-    DWORD64 fileoffset;       // FIX #2: was int, now DWORD64 to support files > 2 GiB
+    DWORD64 fileoffset;
     int sectionindex, sectionoffset;
     string sectionName, stringTosearch, isPE;
 };
+
+// For count-mode output: one row per file with match count
+struct file_match_count {
+    string filepath;
+    int matchCount;
+};
+
 bool compare_filepath(const file_info&, const file_info&);
 bool compare_fileoffset(const file_info&, const file_info&);
 bool compare_secIndex(const file_info&, const file_info&);
