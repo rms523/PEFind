@@ -359,7 +359,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     bool useHexPattern = (hexPat != nullptr && !hexPat->bytes.empty());
 
-    BYTE* pattern = nullptr;
+    const BYTE* pattern = nullptr;
     int pattern_len = 0;
 
     if (!useHexPattern) {

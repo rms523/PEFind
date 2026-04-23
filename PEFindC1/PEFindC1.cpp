@@ -12,10 +12,10 @@
 using std::cout;
 using std::endl;
 
-enum class SearchMode { Ascii = 1, Unicode = 2 };
+enum SearchMode { SM_ASCII = 1, SM_UNICODE = 2 };
 
 struct CliArgs {
-    SearchMode mode = SearchMode::Ascii | SearchMode::Unicode; // default: both
+    SearchMode mode = SM_ASCII | SM_UNICODE; // default: both
     int sortPredicate = -1;       // -1 = no sorting
     bool caseInsensitive = false; // -ci / --nocase flag
     bool countMode = false;       // -c / --count flag
@@ -216,13 +216,13 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
             return false;
         }
         else if (arg == "-a" || arg == "--ascii") {
-            out.mode = SearchMode::Ascii;
+            out.mode = SM_ASCII;
         }
         else if (arg == "-u" || arg == "--unicode") {
-            out.mode = SearchMode::Unicode;
+            out.mode = SM_UNICODE;
         }
         else if (arg == "-au" || arg == "--both" || arg == "-ua") {
-            out.mode = SearchMode::Ascii | SearchMode::Unicode;
+            out.mode = SM_ASCII | SM_UNICODE;
         }
         else if (arg == "-ci" || arg == "--nocase") {
             out.caseInsensitive = true;
@@ -293,8 +293,8 @@ int main(int argc, char** argv)
                     FALSE, args.countMode, &hexPat);  // caseInsensitive doesn't apply to hex mode
     } else {
         // Text search mode: use -a/-u flags as before
-        bool doAscii = (static_cast<int>(args.mode) & static_cast<int>(SearchMode::Ascii)) != 0;
-        bool doUnicode = (static_cast<int>(args.mode) & static_cast<int>(SearchMode::Unicode)) != 0;
+        bool doAscii = (static_cast<int>(args.mode) & static_cast<int>(SM_ASCII)) != 0;
+        bool doUnicode = (static_cast<int>(args.mode) & static_cast<int>(SM_UNICODE)) != 0;
 
         if (!isDir && !doAscii && !doUnicode) {
             cout << "Please specify at least one search mode: -a, -u, or -au." << endl;

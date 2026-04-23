@@ -4,7 +4,7 @@ BYTE* get_nt_hrds(const BYTE* pe_buffer)
 {
     if (pe_buffer == NULL) return NULL;
 
-    IMAGE_DOS_HEADER* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(pe_buffer);
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(pe_buffer);
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
         return NULL;
     }
@@ -12,7 +12,7 @@ BYTE* get_nt_hrds(const BYTE* pe_buffer)
     LONG pe_offset = idh->e_lfanew;
     if (pe_offset > kMaxOffset) return NULL;
     BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + pe_offset;
-    if (reinterpret_cast<DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
+    if (reinterpret_cast<const DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
     return nt_ptr;
 }
 
@@ -33,20 +33,20 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
     BYTE* ptr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
     if (ptr == NULL) return NULL;
 
-    auto* inh32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
+    auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
     if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-        return reinterpret_cast<IMAGE_NT_HEADERS64*>(ptr);
+        return reinterpret_cast<IMAGE_NT_HEADERS64*>(const_cast<BYTE*>(pe_buffer));
     }
     return NULL;
 }
 
 bool is64bit(const BYTE* pe_buffer)
 {
-    BYTE* ptr = get_nt_hrds(pe_buffer);
+    BYTE* ptr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
     if (ptr == NULL) return false;
 
-    auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
-    return inh->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64;
+    auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
+    return inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64;
 }
 
 IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id)
@@ -78,10 +78,10 @@ ULONGLONG get_module_base(const BYTE* pe_buffer)
         return 0;
     }
     if (is64b) {
-        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(payload_nt_hdr);
+        auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(payload_nt_hdr);
         return nthdr64->OptionalHeader.ImageBase;
     }
-    auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(payload_nt_hdr);
+    auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(payload_nt_hdr);
     return static_cast<ULONGLONG>(nthdr32->OptionalHeader.ImageBase);
 }
 
@@ -107,13 +107,13 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
     const BYTE* secPtr = nullptr;
 
     if (is64b) {
-        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(nt_hdr);
-        fileHdr = &nthdr64->FileHeader;
+        auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(nt_hdr);
+        fileHdr = &const_cast<IMAGE_FILE_HEADER&>(nthdr64->FileHeader);
         hdrsSize = nthdr64->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
     } else {
-        auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(nt_hdr);
-        fileHdr = &nthdr32->FileHeader;
+        auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(nt_hdr);
+        fileHdr = &const_cast<IMAGE_FILE_HEADER&>(nthdr32->FileHeader);
         hdrsSize = nthdr32->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
     }
@@ -123,8 +123,6 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
     }
 
     // FIX #1: Use proper struct array indexing instead of raw pointer arithmetic.
-    // The old code did: *(DWORD*)((ULONGLONG)secptr + 20) which is fragile.
-    // Now we iterate through an array of IMAGE_SECTION_HEADER structs.
     const size_t secSize = sizeof(IMAGE_SECTION_HEADER);
 
     for (int numberOfSections = 0; numberOfSections < fileHdr->NumberOfSections; ++numberOfSections) {
@@ -152,7 +150,7 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
 
 BOOL checkPE(const BYTE* buf) 
 {
-    IMAGE_DOS_HEADER* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(buf);
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
         return false;
     }

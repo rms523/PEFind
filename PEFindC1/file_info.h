@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <windows.h>
 using std::string;
 
 struct file_info {
