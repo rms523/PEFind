@@ -78,7 +78,9 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
 
     const DWORD MIN_HEADER = 1024;
     const DWORD MAX_PE_HEADER = 64 * 1024;
-    DWORD readSize = static_cast<DWORD>((std::min)<ULONGLONG>(fileSize.QuadPart, MIN_HEADER));
+    DWORD readSize = static_cast<DWORD>((std::min)(
+        static_cast<ULONGLONG>(fileSize.QuadPart),
+        static_cast<ULONGLONG>(MIN_HEADER)));
     if (readSize == 0) return 0;
 
     outBuf.resize(readSize);
@@ -97,9 +99,9 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     // Ensure the NT signature and file header are available before reading fields from them.
     ULONGLONG ntHeaderMinimum = static_cast<ULONGLONG>(peOffset) + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER);
     if (ntHeaderMinimum > headerBytes) {
-        readSize = static_cast<DWORD>((std::min)<ULONGLONG>(
-            fileSize.QuadPart,
-            (std::max)<ULONGLONG>(ntHeaderMinimum, MIN_HEADER)));
+        readSize = static_cast<DWORD>((std::min)(
+            static_cast<ULONGLONG>(fileSize.QuadPart),
+            (std::max)(ntHeaderMinimum, static_cast<ULONGLONG>(MIN_HEADER))));
         if (readSize > MAX_PE_HEADER) return headerBytes;
 
         outBuf.resize(readSize);
@@ -128,7 +130,9 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     ULONGLONG sectionTableEnd = static_cast<ULONGLONG>(peOffset) + ntHeaderSize +
                                 static_cast<ULONGLONG>(fileHdr->NumberOfSections) * IMAGE_SIZEOF_SECTION_HEADER;
     if (sectionTableEnd > headerBytes) {
-        ULONGLONG neededSize = (std::min)<ULONGLONG>(fileSize.QuadPart, sectionTableEnd);
+        ULONGLONG neededSize = (std::min)(
+            static_cast<ULONGLONG>(fileSize.QuadPart),
+            sectionTableEnd);
         if (neededSize > MAX_PE_HEADER) return headerBytes;
         outBuf.resize(static_cast<DWORD>(neededSize));
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
@@ -148,8 +152,9 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
     }
 
     if (sizeOfHeaders > 0 && static_cast<DWORD>(sizeOfHeaders) > headerBytes) {
-        DWORD needed = static_cast<DWORD>((std::min)<ULONGLONG>(fileSize.QuadPart,
-                        (std::max)<ULONGLONG>(static_cast<ULONGLONG>(sizeOfHeaders), MIN_HEADER)));
+        DWORD needed = static_cast<DWORD>((std::min)(
+            static_cast<ULONGLONG>(fileSize.QuadPart),
+            (std::max)(static_cast<ULONGLONG>(sizeOfHeaders), static_cast<ULONGLONG>(MIN_HEADER))));
         if (needed > MAX_PE_HEADER) return headerBytes;
         outBuf.resize(needed);
         SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN);
@@ -352,7 +357,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             DWORD consumed = static_cast<DWORD>(lastChunkPos + pattern_len);
 
             if (consumed >= search_size) {
-                DWORD new_overlap = (std::min)<DWORD>(OVERLAP, search_size);
+                DWORD new_overlap = (std::min)(OVERLAP, search_size);
                 if (new_overlap > 0) memmove(buf.data(), buf.data() + (search_size - new_overlap), new_overlap);
                 overlap_len = new_overlap;
             } else {
@@ -363,7 +368,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
                 } else { overlap_len = 0; }
             }
         } else {
-            DWORD new_overlap = (std::min)<DWORD>(OVERLAP, search_size);
+            DWORD new_overlap = (std::min)(OVERLAP, search_size);
             if (new_overlap > 0) memmove(buf.data(), buf.data() + (search_size - new_overlap), new_overlap);
             overlap_len = new_overlap;
         }
