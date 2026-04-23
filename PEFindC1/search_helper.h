@@ -18,8 +18,7 @@ struct HexPattern {
 //   "xx xx 90 00" → wildcard + wildcard + exact + exact
 HexPattern parse_hex_pattern(const string& hexStr);
 
-void searchString(const string , const string, BOOL, vector<file_info>&, BOOL isDir, BOOL stream, 
-                  BOOL caseInsensitive = FALSE, BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
+
 void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, 
                        vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive = FALSE,
                        BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);

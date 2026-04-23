@@ -1,3 +1,7 @@
+// Note: HexPattern, parse_hex_pattern(), BMH search, and wildcard matching are also defined in algo.h.
+// algo.h is header-only with pure C++ implementations (uses winnt_mock.h for tests without Windows SDK).
+// This file contains the Windows-dependent production implementation. Both share identical logic.
+
 #include <vector>
 #include <iostream>
 #include <iomanip>
@@ -144,19 +148,7 @@ static std::vector<int> findAllWithWildcards(const BYTE* haystack, size_t haysta
     return positions;
 }
 
-// Legacy naive search kept for API compatibility.
-int searchHexBytes(const BYTE* bufTosearch, const BYTE * stringTosearch, int stringsize, DWORD bufSize)
-{
-    size_t i = 0, j = 0;
-    for (i = 0; i < static_cast<size_t>(bufSize); ++i) {
-        if (j == static_cast<size_t>(stringsize)) break;
-        if (j == 0 && static_cast<DWORD>(stringsize) > (bufSize - static_cast<int>(i))) break;
-        if (bufTosearch[i] == static_cast<BYTE>(stringTosearch[j])) { ++j; continue; }
-        else { j = 0; if (static_cast<DWORD>(stringsize) > 0 && bufTosearch[i] == static_cast<BYTE>(stringTosearch[0])) ++j; }
-    }
-    if (j == static_cast<size_t>(stringsize)) return static_cast<int>(i - j);
-    return -1;
-}
+// Legacy naive search removed — replaced by BMH in search_chunk().
 
 static void print_row_stream(const file_info& fi)
 {
@@ -303,7 +295,7 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
         } else {
             // Has wildcards — use sliding window comparison
             auto positions = findAllWithWildcards(chunk, chunkLen, *hexPat);
-            for (int pos : positions) allOffsets.push_back(base_offset + static_cast<DWORD64>(pos));
+            for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<DWORD64>(pos));
         }
     } else if (isUnicode && caseInsensitive) {
         // Unicode + case-insensitive: lowercase both pattern and chunk using CharLowerBuffW.
@@ -523,17 +515,4 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
     }
 }
 
-void searchString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, vector<file_info>& all_file_info, BOOL isDir, BOOL stream)
-{
-    if (isDir) {
-        try {
-            searchStringInDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream);
-        } catch (std::exception const& e) {
-            std::cout << "Exception: " << e.what() << std::endl;
-        }
-        return;
-    }
 
-    if (!stream) status_update(pathTosearch);
-    searchStringinFile(pathTosearch, stringTosearch, isUnicode, all_file_info, stream);
-}
