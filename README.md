@@ -29,6 +29,7 @@ PEFindC1.exe [options] --hex "<hex_pattern>" <path>
 | `-au`, `--both` | Search for both ASCII and Unicode (default) |
 | `-ci`, `--nocase` | Case-insensitive search |
 | `-c`, `--count` | Show match counts per file instead of individual matches |
+| `-n <n>`, `--nth <n>` | Show only the 1-based Nth match from each file |
 | `--hex <pattern>` | Search for a hex pattern (e.g. `"4D5A9000"` or `"xx xx 90 00"`) |
 | `-s <n>`, `--sort <n>` | Sort results: `0` = filepath, `1` = file offset, `2` = section index, etc. |
 | `-h`, `--help` | Show help message |
@@ -48,6 +49,11 @@ PEFindC1.exe -u -s 1 E:\tmp "Setup"
 Case-insensitive search for both ASCII and Unicode:
 ```bash
 PEFindC1.exe -au -ci -s 2 E:\tmp "Setup"
+```
+
+Show only the first match from each file:
+```bash
+PEFindC1.exe -n 1 E:\tmp "Setup"
 ```
 
 Search by hex pattern (e.g. MZ header):

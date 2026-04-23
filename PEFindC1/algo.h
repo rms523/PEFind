@@ -153,6 +153,13 @@ inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t 
     return positions;
 }
 
+template <typename Offset>
+inline std::vector<Offset> select_nth_match(const std::vector<Offset>& offsets, size_t nthMatch) {
+    if (nthMatch == 0) return offsets;
+    if (nthMatch > offsets.size()) return {};
+    return { offsets[nthMatch - 1] };
+}
+
 // ============================================================
 // PE header parsing helpers — pure C++ implementations for testing.
 // These mirror the logic in pe_hdrs_helper.cpp but work on raw byte buffers.

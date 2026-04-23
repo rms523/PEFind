@@ -269,6 +269,32 @@ TEST(BMHFindAll, TwoBytePatternAtBoundary) {
     EXPECT_EQ(positions[0], 0);
 }
 
+TEST(MatchSelection, ZeroReturnsAllMatches) {
+    std::vector<uint64_t> offsets = {10, 20, 30};
+    auto selected = select_nth_match(offsets, 0);
+    EXPECT_EQ(selected, offsets);
+}
+
+TEST(MatchSelection, OneReturnsFirstMatch) {
+    std::vector<uint64_t> offsets = {10, 20, 30};
+    auto selected = select_nth_match(offsets, 1);
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], 10u);
+}
+
+TEST(MatchSelection, NReturnsNthMatch) {
+    std::vector<uint64_t> offsets = {10, 20, 30};
+    auto selected = select_nth_match(offsets, 2);
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], 20u);
+}
+
+TEST(MatchSelection, OutOfRangeReturnsNoMatches) {
+    std::vector<uint64_t> offsets = {10, 20, 30};
+    auto selected = select_nth_match(offsets, 4);
+    EXPECT_TRUE(selected.empty());
+}
+
 TEST(BMHFindAll, BMHAdvantageOverNaive) {
     // Create data where BMH should skip many positions: 
     // haystack = "aaaa...aaa" + "b", needle = "aaaaa"

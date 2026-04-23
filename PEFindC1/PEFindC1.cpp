@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iomanip>
 #include <Windows.h>
+#include <map>
 #include <vector>
 
 #include "search_helper.h"
@@ -19,6 +20,7 @@ struct CliArgs {
     int sortPredicate = -1;       // -1 = no sorting
     bool caseInsensitive = false; // -ci / --nocase flag
     bool countMode = false;       // -c / --count flag
+    size_t nthMatch = 0;          // 0 = show all matches, N = only Nth match per file
     string hexString;             // --hex <pattern> argument
     string targetPath;            // directory or file path
     string searchString;          // the string to search for (text mode)
@@ -33,6 +35,7 @@ void info_banner()
     cout << "  -au or --both                           search for both ASCII and Unicode strings (default)" << endl;
     cout << "  -ci or --nocase                         case-insensitive search" << endl;
     cout << "  -c or --count                           show match counts per file instead of individual matches" << endl;
+    cout << "  -n <n> or --nth <n>                     show only the 1-based Nth match from each file" << endl;
     cout << "  --hex <pattern>                         search for hex pattern (e.g. \"4D5A9000\" or \"xx xx 90 00\")" << endl;
     cout << "  -s <n> or --sort <n>                    sort results by predicate:" << endl;
     cout << "      0 = filepath, 1 = fileOffset, 2 = sectionIndex," << endl;
@@ -44,6 +47,7 @@ void info_banner()
     cout << "  PEFindC1.exe -a -ci E:\\tmp \"setup\"" << endl;
     cout << "  PEFindC1.exe --hex \"4D5A9000\" E:\\tmp" << endl;
     cout << "  PEFindC1.exe --hex \"xx xx 90 00\" E:\\tmp" << endl;
+    cout << "  PEFindC1.exe -n 1 E:\\tmp \"Setup\"" << endl;
     cout << "  PEFindC1.exe -a -c \"Setup\" E:\\tmp" << endl;
     cout << "  PEFindC1.exe --hex \"4D5A9000\" -c E:\\tmp" << endl;
 }
@@ -189,6 +193,27 @@ static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
     }
 }
 
+static void filter_nth_match_per_file(vector<file_info>& all_file_info, size_t nthMatch)
+{
+    if (nthMatch == 0 || all_file_info.empty()) return;
+
+    std::map<string, vector<file_info>> matchesByFile;
+    for (const auto& fi : all_file_info) {
+        matchesByFile[fi.filepath].push_back(fi);
+    }
+
+    vector<file_info> filtered;
+    for (auto& entry : matchesByFile) {
+        auto& matches = entry.second;
+        std::stable_sort(matches.begin(), matches.end(), compare_fileoffset);
+        if (nthMatch <= matches.size()) {
+            filtered.push_back(matches[nthMatch - 1]);
+        }
+    }
+
+    all_file_info.swap(filtered);
+}
+
 void sortfunction(vector<file_info>& all_file_info, int predicate)
 {
     switch (predicate) {
@@ -229,6 +254,12 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
         }
         else if (arg == "-c" || arg == "--count") {
             out.countMode = true;
+        }
+        else if ((arg == "-n" || arg == "--nth") && i + 1 < argc) {
+            ++i;
+            int n = atoi(argv[i]);
+            if (n < 1) return false;
+            out.nthMatch = static_cast<size_t>(n);
         }
         else if (arg == "--hex" && i + 1 < argc) {
             ++i; // consume next token as hex string
@@ -284,8 +315,8 @@ int main(int argc, char** argv)
     // Check if target is a file or directory
     BOOL isDir = (checkFile(args.targetPath.c_str()) == 1);
 
-    // In count mode, always collect results then print at end (non-streaming)
-    BOOL stream = (args.sortPredicate < 0) && !args.countMode;
+    // In count and nth-match modes, collect results then print at end.
+    BOOL stream = (args.sortPredicate < 0) && !args.countMode && args.nthMatch == 0;
 
     if (isHexMode) {
         // Hex pattern mode: search for raw bytes (ignore -a/-u flags)
@@ -313,6 +344,10 @@ int main(int argc, char** argv)
             checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir, stream, 
                         args.caseInsensitive, args.countMode, nullptr);
         }
+    }
+
+    if (!args.countMode) {
+        filter_nth_match_per_file(all_file_info, args.nthMatch);
     }
 
     // Sort results if requested
