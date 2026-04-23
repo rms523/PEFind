@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <cassert>
 
+#ifndef IMAGE_NT_OPTIONAL_HDR_MAGIC64
+#define IMAGE_NT_OPTIONAL_HDR_MAGIC64 IMAGE_NT_OPTIONAL_HDR64_MAGIC
+#endif
+
 // Hex/wildcard pattern structure for --hex/--wildcard mode
 struct HexPattern {
     std::vector<uint8_t> bytes;      // byte values (valid only if !isWildcard[i])
@@ -274,7 +278,7 @@ inline std::vector<uint8_t> create_test_pe(size_t file_size,
     size_t header_total = dos_header_size + nt_sig_size + file_hdr_size + opt_hdr_size + section_table_size;
     size_t aligned_headers = ((header_total + 511) / 512) * 512;
     
-    size_t total_size = std::max(aligned_headers, file_size);
+    size_t total_size = (std::max)(aligned_headers, file_size);
     
     std::vector<uint8_t> buf(total_size, 0);
     
@@ -309,7 +313,7 @@ inline std::vector<uint8_t> create_test_pe(size_t file_size,
         auto* section = reinterpret_cast<IMAGE_SECTION_HEADER*>(sec_ptr);
         // Section name: ".text", ".rdata", etc. — copy up to 7 chars (8th byte zeroed by memset above)
         const char* names[] = {".text", ".rdata", ".data", ".rsrc", ".reloc"};
-        size_t name_len = std::min(strlen(names[i < 5 ? i : 4]), static_cast<size_t>(7));
+        size_t name_len = (std::min)(strlen(names[i < 5 ? i : 4]), static_cast<size_t>(7));
         memcpy(section->Name, names[i < 5 ? i : 4], name_len);
         
         section->VirtualAddress = static_cast<DWORD>(i * 0x1000);

@@ -6,7 +6,8 @@ using std::string;
 struct file_info {
     string filepath;
     DWORD64 fileoffset;
-    int sectionindex, sectionoffset;
+    int sectionindex;
+    DWORD64 sectionoffset;
     string sectionName, stringTosearch, isPE;
 };
 

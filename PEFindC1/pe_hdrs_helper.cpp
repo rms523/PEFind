@@ -1,4 +1,5 @@
 #include "pe_hdrs_helper.h"
+#include "util.h"
 
 BYTE* get_nt_hrds(const BYTE* pe_buffer)
 {
