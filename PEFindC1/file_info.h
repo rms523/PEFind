@@ -1,12 +1,12 @@
 #pragma once
 #include <string>
-#define MAX_SIZE 0x40000000
 using std::string;
 
 struct file_info {
-	string filepath;
-	int fileoffset, sectionindex, sectionoffset;
-	string sectionName, stringTosearch, isPE;
+    string filepath;
+    DWORD64 fileoffset;       // FIX #2: was int, now DWORD64 to support files > 2 GiB
+    int sectionindex, sectionoffset;
+    string sectionName, stringTosearch, isPE;
 };
 bool compare_filepath(const file_info&, const file_info&);
 bool compare_fileoffset(const file_info&, const file_info&);

@@ -2,167 +2,159 @@
 
 BYTE* get_nt_hrds(const BYTE* pe_buffer)
 {
-	if (pe_buffer == NULL) return NULL;
+    if (pe_buffer == NULL) return NULL;
 
-	IMAGE_DOS_HEADER* idh = (IMAGE_DOS_HEADER*)pe_buffer;
-	if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
-		return NULL;
-	}
-	const LONG kMaxOffset = 1024;
-	LONG pe_offset = idh->e_lfanew;
-	if (pe_offset > kMaxOffset) return NULL;
-	IMAGE_NT_HEADERS32* inh = (IMAGE_NT_HEADERS32*)((BYTE*)pe_buffer + pe_offset);
-	if (inh->Signature != IMAGE_NT_SIGNATURE) return NULL;
-	return (BYTE*)inh;
+    IMAGE_DOS_HEADER* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(pe_buffer);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
+        return NULL;
+    }
+    const LONG kMaxOffset = 1024;
+    LONG pe_offset = idh->e_lfanew;
+    if (pe_offset > kMaxOffset) return NULL;
+    BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + pe_offset;
+    if (reinterpret_cast<DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
+    return nt_ptr;
 }
 
 IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
 {
-	BYTE* ptr = get_nt_hrds(pe_buffer);
-	if (ptr == NULL) return NULL;
+    BYTE* ptr = get_nt_hrds(pe_buffer);
+    if (ptr == NULL) return NULL;
 
-	IMAGE_NT_HEADERS32* inh = (IMAGE_NT_HEADERS32*)(ptr);
-	if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-		return inh;
-	}
-	return NULL;
+    auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
+    if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+        return inh;
+    }
+    return NULL;
 }
 
 IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
 {
-	BYTE* ptr = get_nt_hrds(pe_buffer);
-	if (ptr == NULL) return NULL;
+    BYTE* ptr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
+    if (ptr == NULL) return NULL;
 
-	IMAGE_NT_HEADERS32* inh = (IMAGE_NT_HEADERS32*)(ptr);
-	if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-		return (IMAGE_NT_HEADERS64*)(ptr);
-	}
-	return NULL;
+    auto* inh32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
+    if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
+        return reinterpret_cast<IMAGE_NT_HEADERS64*>(ptr);
+    }
+    return NULL;
 }
 
 bool is64bit(const BYTE* pe_buffer)
 {
-	BYTE* ptr = get_nt_hrds(pe_buffer);
-	if (ptr == NULL) return false;
+    BYTE* ptr = get_nt_hrds(pe_buffer);
+    if (ptr == NULL) return false;
 
-	IMAGE_NT_HEADERS32* inh = (IMAGE_NT_HEADERS32*)(ptr);
-	if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-		return true;
-	}
-	return false;
+    auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
+    return inh->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64;
 }
 
 IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id)
 {
-	if (dir_id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES) return NULL;
+    if (dir_id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES) return NULL;
 
-	BYTE* nt_headers = get_nt_hrds((BYTE*)pe_buffer);
-	if (nt_headers == NULL) return NULL;
+    BYTE* nt_headers = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
+    if (nt_headers == NULL) return NULL;
 
-	IMAGE_DATA_DIRECTORY* peDir = NULL;
-	if (is64bit((BYTE*)pe_buffer)) {
-		IMAGE_NT_HEADERS64* nt_headers64 = (IMAGE_NT_HEADERS64*)nt_headers;
-		peDir = &(nt_headers64->OptionalHeader.DataDirectory[dir_id]);
-	}
-	else {
-		IMAGE_NT_HEADERS32* nt_headers64 = (IMAGE_NT_HEADERS32*)nt_headers;
-		peDir = &(nt_headers64->OptionalHeader.DataDirectory[dir_id]);
-	}
-	if (peDir->VirtualAddress == NULL) {
-		return NULL;
-	}
-	return peDir;
+    IMAGE_DATA_DIRECTORY* peDir = nullptr;
+    if (is64bit(pe_buffer)) {
+        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(nt_headers);
+        peDir = &(nthdr64->OptionalHeader.DataDirectory[dir_id]);
+    } else {
+        auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(nt_headers);
+        peDir = &(nthdr32->OptionalHeader.DataDirectory[dir_id]);
+    }
+    if (peDir->VirtualAddress == 0) {
+        return NULL;
+    }
+    return peDir;
 }
 
 ULONGLONG get_module_base(const BYTE* pe_buffer)
 {
-	bool is64b = is64bit(pe_buffer);
-	//update image base in the written content:
-	BYTE* payload_nt_hdr = get_nt_hrds(pe_buffer);
-	if (payload_nt_hdr == NULL) {
-		return 0;
-	}
-	if (is64b) {
-		IMAGE_NT_HEADERS64* payload_nt_hdr64 = (IMAGE_NT_HEADERS64*)payload_nt_hdr;
-		return payload_nt_hdr64->OptionalHeader.ImageBase;
-	}
-	IMAGE_NT_HEADERS32* payload_nt_hdr32 = (IMAGE_NT_HEADERS32*)payload_nt_hdr;
-	return static_cast<ULONGLONG>(payload_nt_hdr32->OptionalHeader.ImageBase);
+    bool is64b = is64bit(pe_buffer);
+    BYTE* payload_nt_hdr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
+    if (payload_nt_hdr == NULL) {
+        return 0;
+    }
+    if (is64b) {
+        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(payload_nt_hdr);
+        return nthdr64->OptionalHeader.ImageBase;
+    }
+    auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(payload_nt_hdr);
+    return static_cast<ULONGLONG>(nthdr32->OptionalHeader.ImageBase);
 }
 
+// FIX #1: Properly iterate section headers using struct array indexing instead of raw pointer arithmetic.
 PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_size, int globalOffset, int &sectionIndex)
 {
-	if (payload == NULL) return NULL;
+    if (payload == NULL) return NULL;
 
-	bool is64b = is64bit(payload);
+    bool is64b = is64bit(payload);
 
-	BYTE* payload_nt_hdr = get_nt_hrds(payload);
-	if (payload_nt_hdr == NULL) {
-		return NULL;
-	}
+    BYTE* nt_hdr = const_cast<BYTE*>(get_nt_hrds(payload));
+    if (nt_hdr == NULL) {
+        return NULL;
+    }
 
-	IMAGE_FILE_HEADER* fileHdr = NULL;
-	DWORD hdrsSize = 0;
-	LPVOID secptr = NULL;
-	if (is64b) {
-		IMAGE_NT_HEADERS64* payload_nt_hdr64 = (IMAGE_NT_HEADERS64*)payload_nt_hdr;
-		fileHdr = &(payload_nt_hdr64->FileHeader);
-		hdrsSize = payload_nt_hdr64->OptionalHeader.SizeOfHeaders;
-		secptr = (LPVOID)((ULONGLONG) & (payload_nt_hdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader);
-	}
-	else {
-		IMAGE_NT_HEADERS32* payload_nt_hdr32 = (IMAGE_NT_HEADERS32*)payload_nt_hdr;
-		fileHdr = &(payload_nt_hdr32->FileHeader);
-		hdrsSize = payload_nt_hdr32->OptionalHeader.SizeOfHeaders;
-		secptr = (LPVOID)((ULONGLONG) & (payload_nt_hdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader);
-	}
+    // Validate we have enough data for the file header
+    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), payload, sizeof(IMAGE_FILE_HEADER))) {
+        return NULL;
+    }
 
+    IMAGE_FILE_HEADER* fileHdr = nullptr;
+    DWORD hdrsSize = 0;
+    const BYTE* secPtr = nullptr;
 
-	if (fileHdr->NumberOfSections == 0) 
-	{
-		//NO sections
-		return NULL;
-	}
+    if (is64b) {
+        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(nt_hdr);
+        fileHdr = &nthdr64->FileHeader;
+        hdrsSize = nthdr64->OptionalHeader.SizeOfHeaders;
+        secPtr = reinterpret_cast<const BYTE*>(&nthdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
+    } else {
+        auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(nt_hdr);
+        fileHdr = &nthdr32->FileHeader;
+        hdrsSize = nthdr32->OptionalHeader.SizeOfHeaders;
+        secPtr = reinterpret_cast<const BYTE*>(&nthdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
+    }
 
-	int found = 0, numberOfSections = 0;
-	while (numberOfSections < fileHdr->NumberOfSections)
-	{
+    if (fileHdr->NumberOfSections == 0) {
+        return NULL;
+    }
 
-		ULONGLONG rawAddress = (ULONGLONG) * (DWORD*)((ULONGLONG)secptr + 20);
-		ULONGLONG rawsize = (ULONGLONG) * (DWORD*)((ULONGLONG)secptr + 16);
-		//cout << std::hex << "rawAddress: " << rawAddress << " rawsize: " << rawsize << endl;
+    // FIX #1: Use proper struct array indexing instead of raw pointer arithmetic.
+    // The old code did: *(DWORD*)((ULONGLONG)secptr + 20) which is fragile.
+    // Now we iterate through an array of IMAGE_SECTION_HEADER structs.
+    const size_t secSize = sizeof(IMAGE_SECTION_HEADER);
 
-		if (rawAddress <= (ULONGLONG)globalOffset && (ULONGLONG)globalOffset <= (rawAddress + rawsize) )
-		{
-			found = 1;
-			sectionIndex = numberOfSections;
-			break;
-		}
-		numberOfSections++;
-		secptr = (PIMAGE_SECTION_HEADER)(
-			(ULONGLONG)secptr + (IMAGE_SIZEOF_SECTION_HEADER)
-			);
-	}
+    for (int numberOfSections = 0; numberOfSections < fileHdr->NumberOfSections; ++numberOfSections) {
+        const auto* section = reinterpret_cast<const IMAGE_SECTION_HEADER*>(secPtr + (numberOfSections * secSize));
 
-	if (!found) 
-	{
-		// Not in sections
-		return NULL;
-	}
+        // Validate the struct pointer is within bounds before accessing fields
+        if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), section, sizeof(IMAGE_SECTION_HEADER))) {
+            return NULL;
+        }
 
+        DWORD rawAddress = section->PointerToRawData;
+        DWORD rawSize = section->SizeOfRawData;
 
-	//validate pointer
-	if (!validate_ptr((const LPVOID)payload, buffer_size, (const LPVOID)secptr, sizeof(IMAGE_SECTION_HEADER))) {
-		return NULL;
-	}
-	return (PIMAGE_SECTION_HEADER)secptr;
+        // Check if the global offset falls within this section's raw data range
+        if (rawAddress <= static_cast<DWORD>(globalOffset) && 
+            static_cast<DWORD>(globalOffset) <= (rawAddress + rawSize)) {
+            sectionIndex = numberOfSections;
+            return const_cast<IMAGE_SECTION_HEADER*>(section);
+        }
+    }
+
+    // Not found in any section
+    return NULL;
 }
 
 BOOL checkPE(const BYTE* buf) 
 {
-	IMAGE_DOS_HEADER* idh = (IMAGE_DOS_HEADER*)buf;
-	if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
-		return false;
-	}
-	return true;
+    IMAGE_DOS_HEADER* idh = reinterpret_cast<IMAGE_DOS_HEADER*>(buf);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
+        return false;
+    }
+    return true;
 }
