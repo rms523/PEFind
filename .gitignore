@@ -33,6 +33,7 @@ bld/
 [Ll]ogs/
 # CMake build directories
 build/
+build-*/
 out/
 
 # Visual Studio 2015/2017 cache/options directory

@@ -10,11 +10,6 @@ if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# MinGW-specific settings
-if(MINGW)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lshlwapi")
-endif()
-
 # Google Test via FetchContent (for tests target only)
 option(PEFIND_BUILD_TESTS "Build unit tests" ON)
 

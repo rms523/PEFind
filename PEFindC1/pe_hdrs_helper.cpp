@@ -24,7 +24,9 @@ IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
     if (ptr == NULL) return NULL;
 
     auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
-    if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+    if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_I386 &&
+        inh->FileHeader.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER32) &&
+        inh->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
         return inh;
     }
     return NULL;
@@ -37,6 +39,11 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
 
     auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
     if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
+        const auto* inh64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ptr);
+        if (inh64->FileHeader.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) ||
+            inh64->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+            return NULL;
+        }
         return const_cast<IMAGE_NT_HEADERS64*>(reinterpret_cast<const IMAGE_NT_HEADERS64*>(ptr));
     }
     return NULL;
@@ -44,11 +51,7 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
 
 bool is64bit(const BYTE* pe_buffer)
 {
-    BYTE* ptr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
-    if (ptr == NULL) return false;
-
-    auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
-    return inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64;
+    return get_nt_hrds64(pe_buffer) != NULL;
 }
 
 IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id)
@@ -93,32 +96,42 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
 {
     if (payload == NULL) return NULL;
 
-    bool is64b = is64bit(payload);
-
     const BYTE* nt_hdr = get_nt_hrds(payload);
     if (nt_hdr == NULL) {
         return NULL;
     }
 
-    // Validate we have enough data for the file header
-    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), nt_hdr, sizeof(IMAGE_FILE_HEADER))) {
+    // Validate we have enough data for the signature and file header.
+    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), nt_hdr, sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER))) {
         return NULL;
     }
 
-    const IMAGE_FILE_HEADER* fileHdr = nullptr;
-    DWORD hdrsSize = 0;
+    const IMAGE_FILE_HEADER* fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(nt_hdr + sizeof(DWORD));
+    const BYTE* optionalHeader = reinterpret_cast<const BYTE*>(fileHdr) + sizeof(IMAGE_FILE_HEADER);
+    if (fileHdr->SizeOfOptionalHeader < sizeof(WORD) ||
+        !validate_ptr(payload, static_cast<SIZE_T>(buffer_size), optionalHeader, fileHdr->SizeOfOptionalHeader)) {
+        return NULL;
+    }
+
+    const WORD optionalMagic = *reinterpret_cast<const WORD*>(optionalHeader);
     const BYTE* secPtr = nullptr;
 
-    if (is64b) {
+    if (optionalMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        if (fileHdr->Machine != IMAGE_FILE_MACHINE_AMD64 ||
+            fileHdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64)) {
+            return NULL;
+        }
         auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(nt_hdr);
-        fileHdr = &nthdr64->FileHeader;
-        hdrsSize = nthdr64->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
-    } else {
+    } else if (optionalMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        if (fileHdr->Machine != IMAGE_FILE_MACHINE_I386 ||
+            fileHdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER32)) {
+            return NULL;
+        }
         auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(nt_hdr);
-        fileHdr = &nthdr32->FileHeader;
-        hdrsSize = nthdr32->OptionalHeader.SizeOfHeaders;
         secPtr = reinterpret_cast<const BYTE*>(&nthdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
+    } else {
+        return NULL;
     }
 
     if (fileHdr->NumberOfSections == 0) {

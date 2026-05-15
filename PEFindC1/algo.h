@@ -2,10 +2,16 @@
 
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <cstdint>
+#include <limits>
 #include <cassert>
+
+#ifndef IMAGE_NT_OPTIONAL_HDR_MAGIC32
+#define IMAGE_NT_OPTIONAL_HDR_MAGIC32 IMAGE_NT_OPTIONAL_HDR32_MAGIC
+#endif
 
 #ifndef IMAGE_NT_OPTIONAL_HDR_MAGIC64
 #define IMAGE_NT_OPTIONAL_HDR_MAGIC64 IMAGE_NT_OPTIONAL_HDR64_MAGIC
@@ -34,17 +40,17 @@ inline HexPattern parse_hex_pattern(const std::string& hexStr) {
     
     size_t i = 0;
     while (i < cleaned.size()) {
-        char c1 = tolower(static_cast<unsigned char>(cleaned[i]));
+        char c1 = static_cast<char>(std::tolower(static_cast<unsigned char>(cleaned[i])));
         
         // Check for wildcard "xx" or "XX"
         if (c1 == 'x' && i + 1 < cleaned.size() && 
-            tolower(static_cast<unsigned char>(cleaned[i+1])) == 'x') {
+            std::tolower(static_cast<unsigned char>(cleaned[i+1])) == 'x') {
             pattern.bytes.push_back(0);
             pattern.isWildcard.push_back(true);
             i += 2;
         } else if (i + 1 < cleaned.size()) {
-            char h = toupper(static_cast<unsigned char>(cleaned[i]));
-            char l = toupper(static_cast<unsigned char>(cleaned[i+1]));
+            char h = static_cast<char>(std::toupper(static_cast<unsigned char>(cleaned[i])));
+            char l = static_cast<char>(std::toupper(static_cast<unsigned char>(cleaned[i+1])));
             
             uint8_t high, low;
             if (h >= '0' && h <= '9') high = static_cast<uint8_t>(h - '0');
@@ -69,7 +75,8 @@ inline HexPattern parse_hex_pattern(const std::string& hexStr) {
 
 // Case-insensitive byte comparison helper for ASCII mode
 inline bool bytes_equal_ci(uint8_t a, uint8_t b) { 
-    return tolower(a) == tolower(b); 
+    return std::tolower(static_cast<unsigned char>(a)) ==
+           std::tolower(static_cast<unsigned char>(b));
 }
 
 // Boyer-Moore-Horspool search — O(n/m) average case.
@@ -91,6 +98,7 @@ inline int search_bmh(const uint8_t* haystack, size_t haystackLen,
                       const uint8_t* needle, size_t needleLen,
                       ByteCompare cmp) {
     if (needleLen == 0 || needleLen > haystackLen) return -1;
+    if (haystack == nullptr || needle == nullptr || cmp == nullptr) return -1;
 
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
@@ -112,6 +120,7 @@ inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen
                                       ByteCompare cmp) {
     std::vector<int> positions;
     if (needleLen == 0 || needleLen > haystackLen) return positions;
+    if (haystack == nullptr || needle == nullptr || cmp == nullptr) return positions;
 
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
@@ -125,6 +134,59 @@ inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen
         else { i += skip[static_cast<uint8_t>(haystack[i + needleLen - 1])]; }
     }
     return positions;
+}
+
+// Find all occurrences while reading the haystack in fixed-size chunks.
+// This mirrors the scanner's chunk/overlap strategy and keeps the final
+// needleLen - 1 bytes from every chunk so boundary-spanning matches survive.
+inline std::vector<uint64_t> find_all_bmh_chunked(const uint8_t* haystack, size_t haystackLen,
+                                                   const uint8_t* needle, size_t needleLen,
+                                                   size_t chunkSize, ByteCompare cmp) {
+    std::vector<uint64_t> positions;
+    if (haystack == nullptr || needle == nullptr || cmp == nullptr) return positions;
+    if (needleLen == 0 || chunkSize == 0 || haystackLen == 0) return positions;
+
+    const size_t overlap = needleLen - 1;
+    std::vector<uint8_t> chunk(chunkSize + overlap);
+    size_t overlapLen = 0;
+    size_t readOffset = 0;
+    uint64_t baseOffset = 0;
+
+    while (readOffset < haystackLen) {
+        size_t bytesRead = (std::min)(chunkSize, haystackLen - readOffset);
+        memcpy(chunk.data() + overlapLen, haystack + readOffset, bytesRead);
+        readOffset += bytesRead;
+
+        size_t searchSize = overlapLen + bytesRead;
+        auto chunkPositions = find_all_bmh(chunk.data(), searchSize, needle, needleLen, cmp);
+        for (int pos : chunkPositions) {
+            positions.push_back(baseOffset + static_cast<uint64_t>(pos));
+        }
+
+        size_t newOverlap = (std::min)(overlap, searchSize);
+        if (newOverlap > 0) {
+            memmove(chunk.data(), chunk.data() + (searchSize - newOverlap), newOverlap);
+        }
+        overlapLen = newOverlap;
+        baseOffset += static_cast<uint64_t>(searchSize - overlapLen);
+    }
+
+    std::sort(positions.begin(), positions.end());
+    positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
+
+    std::vector<uint64_t> nonOverlapping;
+    uint64_t nextAllowedOffset = 0;
+    for (uint64_t pos : positions) {
+        if (pos < nextAllowedOffset) continue;
+
+        nonOverlapping.push_back(pos);
+        if (pos > (std::numeric_limits<uint64_t>::max)() - static_cast<uint64_t>(needleLen)) {
+            nextAllowedOffset = (std::numeric_limits<uint64_t>::max)();
+        } else {
+            nextAllowedOffset = pos + static_cast<uint64_t>(needleLen);
+        }
+    }
+    return nonOverlapping;
 }
 
 // Find all occurrences of a hex pattern (with optional wildcards) using sliding window.
@@ -207,12 +269,14 @@ inline PeInfo parse_pe_header(const uint8_t* buf, size_t buf_size) {
         if (file_hdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER32)) return info;
         info.is_64bit = false;
         const auto* opt_hdr32 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER32*>(optional_header);
+        if (opt_hdr32->Magic != IMAGE_NT_OPTIONAL_HDR_MAGIC32) return info;
         info.size_of_headers = opt_hdr32->SizeOfHeaders;
         info.is_valid = true;
     } else if (file_hdr->Machine == IMAGE_FILE_MACHINE_AMD64) {
         if (file_hdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64)) return info;
         info.is_64bit = true;
         const auto* opt_hdr64 = reinterpret_cast<const IMAGE_OPTIONAL_HEADER64*>(optional_header);
+        if (opt_hdr64->Magic != IMAGE_NT_OPTIONAL_HDR_MAGIC64) return info;
         info.size_of_headers = opt_hdr64->SizeOfHeaders;
         info.is_valid = true;
     }

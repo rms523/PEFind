@@ -260,6 +260,47 @@ TEST(BMHFindAll, EmptyHaystack) {
     EXPECT_TRUE(positions.empty());
 }
 
+TEST(BMHFindAll, NullNeedleWithLength) {
+    const uint8_t haystack[] = {'a', 'b'};
+
+    auto positions = find_all_bmh(haystack, 2, nullptr, 1, [](uint8_t a, uint8_t b) { return a == b; });
+    EXPECT_TRUE(positions.empty());
+}
+
+TEST(BMHFindAllChunked, FindsBoundaryMatchAfterEarlierMatch) {
+    const uint8_t haystack[] = {
+        'a', 'b', 'c', 'x', 'x', 'x', 'x', 'a', 'b', 'c'
+    };
+    const uint8_t needle[] = {'a', 'b', 'c'};
+
+    auto positions = find_all_bmh_chunked(haystack, sizeof(haystack), needle, sizeof(needle), 8,
+                                          [](uint8_t a, uint8_t b) { return a == b; });
+
+    ASSERT_EQ(positions.size(), 2u);
+    EXPECT_EQ(positions[0], 0u);
+    EXPECT_EQ(positions[1], 7u);
+}
+
+TEST(BMHFindAllChunked, DoesNotReintroduceOverlappingMatchFromOverlapWindow) {
+    const uint8_t haystack[] = {'a', 'a', 'a', 'a', 'a'};
+    const uint8_t needle[] = {'a', 'a', 'a'};
+
+    auto positions = find_all_bmh_chunked(haystack, sizeof(haystack), needle, sizeof(needle), 4,
+                                          [](uint8_t a, uint8_t b) { return a == b; });
+
+    ASSERT_EQ(positions.size(), 1u);
+    EXPECT_EQ(positions[0], 0u);
+}
+
+TEST(BMHFindAllChunked, RejectsZeroChunkSize) {
+    const uint8_t haystack[] = {'a', 'b', 'c'};
+    const uint8_t needle[] = {'a'};
+
+    auto positions = find_all_bmh_chunked(haystack, sizeof(haystack), needle, sizeof(needle), 0,
+                                          [](uint8_t a, uint8_t b) { return a == b; });
+    EXPECT_TRUE(positions.empty());
+}
+
 TEST(BMHFindAll, TwoBytePatternAtBoundary) {
     const uint8_t haystack[] = {'a', 'b'};
     const uint8_t needle[]   = {'a', 'b'};

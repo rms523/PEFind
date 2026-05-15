@@ -20,9 +20,8 @@ int checkFile(const string pathTosearch)
     DWORD fileInfo;
     fileInfo = GetFileAttributesA(pathTosearch.c_str());
 
-    if (INVALID_FILE_ATTRIBUTES == fileInfo && GetLastError() == ERROR_FILE_NOT_FOUND)
+    if (INVALID_FILE_ATTRIBUTES == fileInfo)
     {
-        //cout << "file or path: " << pathTosearch << " does not exist." << endl;
         return -1;
     }
 

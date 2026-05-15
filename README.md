@@ -4,7 +4,9 @@ A command-line tool for static analysis that searches for ASCII, Unicode, and he
 
 ## Building
 
-Requires CMake 3.16+ and a C++17 compiler (MSVC or GCC/Clang).
+Requires CMake 3.16+ and a C++17 compiler. The scanner itself uses Windows
+APIs and is built on Windows; the unit tests are portable and can run on other
+platforms.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -16,7 +18,7 @@ Unit tests are included and run with `ctest` from the build directory.
 ## Usage
 
 ```
-PEFindC1.exe [options] <search_string> <path>
+PEFindC1.exe [options] <path> <search_string>
 PEFindC1.exe [options] --hex "<hex_pattern>" <path>
 ```
 

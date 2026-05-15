@@ -1,10 +1,13 @@
 // PEFindC1.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <iostream>
 #include <iomanip>
 #include <Windows.h>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "search_helper.h"
@@ -16,6 +19,7 @@ using std::endl;
 enum SearchMode { SM_ASCII = 1, SM_UNICODE = 2 };
 
 struct CliArgs {
+    bool showHelp = false;
     int mode = SM_ASCII | SM_UNICODE; // default: both
     int sortPredicate = -1;       // -1 = no sorting
     bool caseInsensitive = false; // -ci / --nocase flag
@@ -48,7 +52,7 @@ void info_banner()
     cout << "  PEFindC1.exe --hex \"4D5A9000\" E:\\tmp" << endl;
     cout << "  PEFindC1.exe --hex \"xx xx 90 00\" E:\\tmp" << endl;
     cout << "  PEFindC1.exe -n 1 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -a -c \"Setup\" E:\\tmp" << endl;
+    cout << "  PEFindC1.exe -a -c E:\\tmp \"Setup\"" << endl;
     cout << "  PEFindC1.exe --hex \"4D5A9000\" -c E:\\tmp" << endl;
 }
 
@@ -109,8 +113,8 @@ void printfunction(const vector<file_info>& all_file_info)
         cout.flags(f);
         cout << std::setw(maxlen + 5) << std::left << fi.filepath;
         cout << std::setw(12) << std::uppercase << std::hex << fi.fileoffset;
-        cout << std::setw(12) << fi.sectionindex;
-        cout << std::setw(12) << fi.sectionoffset;
+        cout << std::setw(12) << std::dec << fi.sectionindex;
+        cout << std::setw(12) << std::uppercase << std::hex << fi.sectionoffset;
         cout << std::setw(18) << fi.sectionName;
         cout << std::setw(38) << fi.isPE;
         cout << endl;
@@ -160,17 +164,13 @@ BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL is
                  vector<file_info>& all_file_info, BOOL isDir, BOOL stream, BOOL caseInsensitive,
                  BOOL countMode, const HexPattern* hexPat)
 {
-    if (checkFile(pathTosearch.c_str()) == -1) {
-        return false;
-    }
-    if (checkFile(pathTosearch.c_str()) == 0) {
+    if (!isDir) {
         checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive, countMode, hexPat);
         return true;
-    } else if (checkFile(pathTosearch.c_str()) == 1) {
-        checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive, countMode, hexPat);
-        return true;
     }
-    return false;
+
+    checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive, countMode, hexPat);
+    return true;
 }
 
 // File-level search with case-insensitive and hex/count support
@@ -214,6 +214,45 @@ static void filter_nth_match_per_file(vector<file_info>& all_file_info, size_t n
     all_file_info.swap(filtered);
 }
 
+static void merge_count_results_by_file(vector<file_info>& all_file_info)
+{
+    std::unordered_map<string, size_t> indexByPath;
+    vector<file_info> merged;
+
+    for (const auto& fi : all_file_info) {
+        size_t count = 0;
+        try {
+            count = static_cast<size_t>(std::stoull(fi.stringTosearch));
+        } catch (...) {
+            count = 0;
+        }
+
+        auto existing = indexByPath.find(fi.filepath);
+        if (existing == indexByPath.end()) {
+            indexByPath[fi.filepath] = merged.size();
+            merged.push_back(fi);
+        } else {
+            file_info& target = merged[existing->second];
+            size_t current = 0;
+            try {
+                current = static_cast<size_t>(std::stoull(target.stringTosearch));
+            } catch (...) {
+                current = 0;
+            }
+            target.stringTosearch = std::to_string(current + count);
+            if (target.sectionName.empty() && !fi.sectionName.empty()) {
+                target.sectionindex = fi.sectionindex;
+                target.sectionoffset = fi.sectionoffset;
+                target.sectionName = fi.sectionName;
+                target.isPE = fi.isPE;
+                target.fileoffset = fi.fileoffset;
+            }
+        }
+    }
+
+    all_file_info.swap(merged);
+}
+
 void sortfunction(vector<file_info>& all_file_info, int predicate)
 {
     switch (predicate) {
@@ -236,9 +275,8 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
         string arg = argv[i];
 
         if (arg == "-h" || arg == "--help") {
-            banner();
-            info_banner();
-            return false;
+            out.showHelp = true;
+            return true;
         }
         else if (arg == "-a" || arg == "--ascii") {
             out.mode = SM_ASCII;
@@ -255,33 +293,47 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
         else if (arg == "-c" || arg == "--count") {
             out.countMode = true;
         }
-        else if ((arg == "-n" || arg == "--nth") && i + 1 < argc) {
+        else if (arg == "-n" || arg == "--nth") {
+            if (i + 1 >= argc) return false;
             ++i;
-            int n = atoi(argv[i]);
-            if (n < 1) return false;
+            char* end = nullptr;
+            errno = 0;
+            unsigned long n = std::strtoul(argv[i], &end, 10);
+            if (errno != 0 || end == argv[i] || *end != '\0' || n == 0) return false;
             out.nthMatch = static_cast<size_t>(n);
         }
-        else if (arg == "--hex" && i + 1 < argc) {
-            ++i; // consume next token as hex string
+        else if (arg == "--hex") {
+            if (i + 1 >= argc) return false;
+            ++i;
             out.hexString = argv[i];
         }
-        else if ((arg == "-s" || arg == "--sort") && i + 1 < argc) {
+        else if (arg == "-s" || arg == "--sort") {
+            if (i + 1 >= argc) return false;
             ++i;
-            out.sortPredicate = atoi(argv[i]);
+            char* end = nullptr;
+            errno = 0;
+            long sortPredicate = std::strtol(argv[i], &end, 10);
+            if (errno != 0 || end == argv[i] || *end != '\0' ||
+                sortPredicate < 0 || sortPredicate > 5) {
+                return false;
+            }
+            out.sortPredicate = static_cast<int>(sortPredicate);
         }
         else {
             positional.push_back(arg);
         }
     }
 
+    if (out.showHelp) return true;
+
     // Validate based on mode
     if (!out.hexString.empty()) {
-        // Hex mode: need at least path
-        if (positional.size() < 1) return false;
+        // Hex mode: need path only
+        if (positional.size() != 1) return false;
         out.targetPath = positional[0];
     } else {
         // Text mode: need path + search string
-        if (positional.size() < 2) return false;
+        if (positional.size() != 2) return false;
         out.targetPath = positional[0];
         out.searchString = positional[1];
     }
@@ -296,6 +348,11 @@ int main(int argc, char** argv)
         banner();
         info_banner();
         return 1;
+    }
+    if (args.showHelp) {
+        banner();
+        info_banner();
+        return 0;
     }
 
     vector<file_info> all_file_info;
@@ -313,7 +370,12 @@ int main(int argc, char** argv)
     }
 
     // Check if target is a file or directory
-    BOOL isDir = (checkFile(args.targetPath.c_str()) == 1);
+    int targetKind = checkFile(args.targetPath);
+    if (targetKind == -1) {
+        cout << "Error: file or path does not exist or cannot be accessed: " << args.targetPath << endl;
+        return 1;
+    }
+    BOOL isDir = (targetKind == 1);
 
     // In count and nth-match modes, collect results then print at end.
     BOOL stream = (args.sortPredicate < 0) && !args.countMode && args.nthMatch == 0;
@@ -348,6 +410,8 @@ int main(int argc, char** argv)
 
     if (!args.countMode) {
         filter_nth_match_per_file(all_file_info, args.nthMatch);
+    } else {
+        merge_count_results_by_file(all_file_info);
     }
 
     // Sort results if requested
