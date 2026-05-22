@@ -7,11 +7,13 @@
 #include <iomanip>
 #include <algorithm>
 #include <cctype>
+#include <cwchar>
 #include <limits>
 #include "file_info.h"
 #include "search_helper.h"
 #include "pe_hdrs_helper.h"
 #include "algo.h"
+#include "util.h"
 
 // RAII wrapper for HANDLE to prevent leaks on early returns
 struct HandleGuard {
@@ -256,7 +258,14 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
                         vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive,
                         BOOL countMode, const HexPattern* hexPat)
 {
-    HANDLE hHandle = CreateFile(pathTosearch.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    std::wstring widePath = utf8_to_utf16(pathTosearch);
+    if (widePath.empty() && !pathTosearch.empty()) {
+        std::cout << "Failed to convert path: " << pathTosearch.c_str() << std::endl;
+        return;
+    }
+
+    HANDLE hHandle = CreateFileW(widePath.c_str(), GENERIC_READ, FILE_SHARE_READ, 0,
+                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
     if (hHandle == INVALID_HANDLE_VALUE) {
         std::cout << "Failed to Open file: " << pathTosearch.c_str() << std::endl;
@@ -293,12 +302,11 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         if (stringsize == 0) return;
 
         if (isUnicode) {
-            wpat.resize(stringsize + 1);
-            int k = MultiByteToWideChar(CP_UTF8, 0, stringTosearch.c_str(), -1, wpat.data(), static_cast<int>(wpat.size()));
-            if (!k) { std::cout << "Unicode conversion failed" << std::endl; return; }
-            wpat[static_cast<size_t>(k - 1)] = L'\0';
+            std::wstring widePattern = utf8_to_utf16(stringTosearch);
+            if (widePattern.empty()) { std::cout << "Unicode conversion failed" << std::endl; return; }
+            wpat.assign(widePattern.begin(), widePattern.end());
             pattern = reinterpret_cast<const BYTE*>(wpat.data());
-            pattern_len = (k - 1) * sizeof(WCHAR);
+            pattern_len = static_cast<int>(wpat.size() * sizeof(WCHAR));
         } else {
             ascii_pat.assign(stringTosearch.begin(), stringTosearch.end());
             if (caseInsensitive) {
@@ -394,11 +402,17 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
                         vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive,
                         BOOL countMode, const HexPattern* hexPat)
 {
-    WIN32_FIND_DATA findData;
+    WIN32_FIND_DATAW findData;
     HANDLE hFind = INVALID_HANDLE_VALUE;
-    std::string full_path = directory + "\\*";
+    std::wstring wideDirectory = utf8_to_utf16(directory);
+    if (wideDirectory.empty() && !directory.empty()) {
+        std::cout << std::endl << "Skipping directory: " << directory << std::endl;
+        return;
+    }
 
-    hFind = FindFirstFileA(full_path.c_str(), &findData);
+    std::wstring full_path = wideDirectory + L"\\*";
+
+    hFind = FindFirstFileW(full_path.c_str(), &findData);
 
     if (hFind == INVALID_HANDLE_VALUE) {
         std::cout << std::endl << "Skipping directory: " << directory << std::endl;
@@ -408,13 +422,13 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
     HandleGuard findGuard(hFind);
 
     do {
-        if (strcmp(findData.cFileName, ".") == 0 || strcmp(findData.cFileName, "..") == 0) continue;
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0) continue;
 
         std::string combined_path = directory;
         if (!combined_path.empty() && combined_path.back() != '\\' && combined_path.back() != '/') {
             combined_path += "\\";
         }
-        combined_path += findData.cFileName;
+        combined_path += utf16_to_utf8(findData.cFileName);
 
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             if (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -427,5 +441,5 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
             searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info, stream, 
                                caseInsensitive, countMode, hexPat);
         }
-    } while (FindNextFileA(hFind, &findData) != 0);
+    } while (FindNextFileW(hFind, &findData) != 0);
 }

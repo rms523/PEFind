@@ -70,4 +70,7 @@ PEFindC1.exe -c E:\tmp "Setup"
 
 ## Notes
 
-- If a PE file is invalid or the string is not found in PE sections (e.g. strings in overlay or headers), it will report "Invalid PE" or "string not in sections".
+- Normal ASCII, Unicode, and hex matches use the same result table columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE`.
+- Invalid PE files and matches outside PE sections are reported in the `isPE` column as `Invalid PE or string not in sections(overlay?)`.
+- Hex patterns must be complete byte pairs and must contain at least one exact byte; all-wildcard patterns are rejected.
+- `--count` and `--nth` are separate output modes and cannot be combined.

@@ -325,6 +325,7 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
     }
 
     if (out.showHelp) return true;
+    if (out.countMode && out.nthMatch != 0) return false;
 
     // Validate based on mode
     if (!out.hexString.empty()) {
@@ -377,12 +378,8 @@ int main(int argc, char** argv)
     }
     BOOL isDir = (targetKind == 1);
 
-    // In count and nth-match modes, collect results then print at end.
-    BOOL stream = (args.sortPredicate < 0) && !args.countMode && args.nthMatch == 0;
-    if (stream) {
-        banner();
-        print_header(90);
-    }
+    // Keep every mode on the same final rendering path.
+    BOOL stream = FALSE;
 
     if (isHexMode) {
         // Hex pattern mode: search for raw bytes (ignore -a/-u flags)
@@ -428,7 +425,7 @@ int main(int argc, char** argv)
     if (!all_file_info.empty()) {
         if (args.countMode) {
             print_count_mode(all_file_info);
-        } else if (!stream) {
+        } else {
             printfunction(all_file_info);
         }
     }

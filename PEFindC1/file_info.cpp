@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include "file_info.h"
+#include "util.h"
 
 
 bool compare_filepath(const file_info& x, const file_info& y) { return x.filepath < y.filepath; }
@@ -17,8 +18,12 @@ bool compare_isPE(const file_info& x, const file_info& y) { return x.isPE < y.is
 
 int checkFile(const string pathTosearch)
 {
-    DWORD fileInfo;
-    fileInfo = GetFileAttributesA(pathTosearch.c_str());
+    std::wstring widePath = utf8_to_utf16(pathTosearch);
+    if (widePath.empty() && !pathTosearch.empty()) {
+        return -1;
+    }
+
+    DWORD fileInfo = GetFileAttributesW(widePath.c_str());
 
     if (INVALID_FILE_ATTRIBUTES == fileInfo)
     {

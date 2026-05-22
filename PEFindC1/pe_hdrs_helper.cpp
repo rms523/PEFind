@@ -1,30 +1,14 @@
 #include "pe_hdrs_helper.h"
 #include "util.h"
 
-BYTE* get_nt_hrds(const BYTE* pe_buffer)
-{
-    if (pe_buffer == NULL) return NULL;
-
-    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(pe_buffer);
-    if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
-        return NULL;
-    }
-    // Allow e_lfanew up to 64KB — real PE files can have NT headers far beyond offset 1024
-    const LONG kMaxOffset = 65536;
-    LONG pe_offset = idh->e_lfanew;
-    if (pe_offset < 0 || pe_offset > kMaxOffset) return NULL;
-    BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + pe_offset;
-    if (reinterpret_cast<const DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
-    return nt_ptr;
-}
-
-static BYTE* get_nt_hdrs_checked(const BYTE* pe_buffer, size_t buffer_size)
+BYTE* get_nt_hrds(const BYTE* pe_buffer, size_t buffer_size)
 {
     if (pe_buffer == NULL || buffer_size < sizeof(IMAGE_DOS_HEADER)) return NULL;
 
     const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(pe_buffer);
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
 
+    // Allow e_lfanew up to 64KB; real PE files can keep NT headers well past 1024.
     const LONG kMaxOffset = 65536;
     LONG pe_offset = idh->e_lfanew;
     if (pe_offset < 0 || pe_offset > kMaxOffset) return NULL;
@@ -37,10 +21,13 @@ static BYTE* get_nt_hdrs_checked(const BYTE* pe_buffer, size_t buffer_size)
     return nt_ptr;
 }
 
-IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
+IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer, size_t buffer_size)
 {
-    BYTE* ptr = get_nt_hrds(pe_buffer);
+    BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
     if (ptr == NULL) return NULL;
+    if (!validate_ptr(pe_buffer, static_cast<SIZE_T>(buffer_size), ptr, sizeof(IMAGE_NT_HEADERS32))) {
+        return NULL;
+    }
 
     auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
     if (inh->FileHeader.Machine == IMAGE_FILE_MACHINE_I386 &&
@@ -51,10 +38,13 @@ IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
     return NULL;
 }
 
-IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
+IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer, size_t buffer_size)
 {
-    const BYTE* ptr = get_nt_hrds(pe_buffer);
+    const BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
     if (ptr == NULL) return NULL;
+    if (!validate_ptr(pe_buffer, static_cast<SIZE_T>(buffer_size), ptr, sizeof(IMAGE_NT_HEADERS64))) {
+        return NULL;
+    }
 
     auto* inh32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(ptr);
     if (inh32->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
@@ -68,24 +58,21 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer)
     return NULL;
 }
 
-bool is64bit(const BYTE* pe_buffer)
+bool is64bit(const BYTE* pe_buffer, size_t buffer_size)
 {
-    return get_nt_hrds64(pe_buffer) != NULL;
+    return get_nt_hrds64(pe_buffer, buffer_size) != NULL;
 }
 
-IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id)
+IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, size_t buffer_size, DWORD dir_id)
 {
     if (dir_id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES) return NULL;
 
-    BYTE* nt_headers = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
-    if (nt_headers == NULL) return NULL;
-
     IMAGE_DATA_DIRECTORY* peDir = nullptr;
-    if (is64bit(pe_buffer)) {
-        auto* nthdr64 = reinterpret_cast<IMAGE_NT_HEADERS64*>(nt_headers);
+    if (auto* nthdr64 = get_nt_hrds64(pe_buffer, buffer_size)) {
         peDir = &(nthdr64->OptionalHeader.DataDirectory[dir_id]);
     } else {
-        auto* nthdr32 = reinterpret_cast<IMAGE_NT_HEADERS32*>(nt_headers);
+        auto* nthdr32 = get_nt_hrds32(const_cast<BYTE*>(pe_buffer), buffer_size);
+        if (nthdr32 == NULL) return NULL;
         peDir = &(nthdr32->OptionalHeader.DataDirectory[dir_id]);
     }
     if (peDir->VirtualAddress == 0) {
@@ -94,18 +81,14 @@ IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id)
     return peDir;
 }
 
-ULONGLONG get_module_base(const BYTE* pe_buffer)
+ULONGLONG get_module_base(const BYTE* pe_buffer, size_t buffer_size)
 {
-    bool is64b = is64bit(pe_buffer);
-    BYTE* payload_nt_hdr = const_cast<BYTE*>(get_nt_hrds(pe_buffer));
-    if (payload_nt_hdr == NULL) {
-        return 0;
-    }
-    if (is64b) {
-        auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(payload_nt_hdr);
+    if (auto* nthdr64 = get_nt_hrds64(pe_buffer, buffer_size)) {
         return nthdr64->OptionalHeader.ImageBase;
     }
-    auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(payload_nt_hdr);
+
+    auto* nthdr32 = get_nt_hrds32(const_cast<BYTE*>(pe_buffer), buffer_size);
+    if (nthdr32 == NULL) return 0;
     return static_cast<ULONGLONG>(nthdr32->OptionalHeader.ImageBase);
 }
 
@@ -115,7 +98,7 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
 {
     if (payload == NULL) return NULL;
 
-    const BYTE* nt_hdr = get_nt_hdrs_checked(payload, buffer_size);
+    const BYTE* nt_hdr = get_nt_hrds(payload, buffer_size);
     if (nt_hdr == NULL) {
         return NULL;
     }

@@ -16,3 +16,16 @@ target_link_libraries(test_algorithms PRIVATE gtest gtest_main)
 
 # Register tests with CTest
 gtest_discover_tests(test_algorithms)
+
+if(WIN32)
+    add_executable(test_scanner_windows
+        test_scanner_windows.cpp
+    )
+
+    target_include_directories(test_scanner_windows PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../PEFindC1
+    )
+    target_link_libraries(test_scanner_windows PRIVATE pefind_core gtest gtest_main)
+    gtest_discover_tests(test_scanner_windows)
+endif()
