@@ -6,10 +6,10 @@
 
 using std::vector;
 
-void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, 
-                        vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive = FALSE,
+void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode,
+                        vector<file_info>& all_file_info, BOOL caseInsensitive = FALSE,
                         BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
 
-void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, 
-                       vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive = FALSE,
+void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode,
+                       vector<file_info>& all_file_info, BOOL caseInsensitive = FALSE,
                        BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);

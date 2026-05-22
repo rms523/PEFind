@@ -11,12 +11,6 @@ struct file_info {
     string sectionName, stringTosearch, isPE;
 };
 
-// For count-mode output: one row per file with match count
-struct file_match_count {
-    string filepath;
-    int matchCount;
-};
-
 bool compare_filepath(const file_info&, const file_info&);
 bool compare_fileoffset(const file_info&, const file_info&);
 bool compare_secIndex(const file_info&, const file_info&);

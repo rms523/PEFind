@@ -28,4 +28,28 @@ if(WIN32)
     )
     target_link_libraries(test_scanner_windows PRIVATE pefind_core gtest gtest_main)
     gtest_discover_tests(test_scanner_windows)
+
+    add_test(NAME cli_ascii_result_columns
+        COMMAND $<TARGET_FILE:PEFindC1> -a "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+    set_tests_properties(cli_ascii_result_columns PROPERTIES
+        PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE")
+
+    add_test(NAME cli_hex_result_columns
+        COMMAND $<TARGET_FILE:PEFindC1> --hex "50 45 46 69 6E 64" "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
+    set_tests_properties(cli_hex_result_columns PROPERTIES
+        PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE")
+
+    add_test(NAME cli_hex_count_result_columns
+        COMMAND $<TARGET_FILE:PEFindC1> --hex "50 45 46 69 6E 64" -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
+    set_tests_properties(cli_hex_count_result_columns PROPERTIES
+        PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE.*Matches")
+
+    add_test(NAME cli_ascii_count_result_columns
+        COMMAND $<TARGET_FILE:PEFindC1> -a -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+    set_tests_properties(cli_ascii_count_result_columns PROPERTIES
+        PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE.*Matches")
+
+    add_test(NAME cli_reject_count_with_nth
+        COMMAND $<TARGET_FILE:PEFindC1> -c -n 1 "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+    set_tests_properties(cli_reject_count_with_nth PROPERTIES WILL_FAIL TRUE)
 endif()

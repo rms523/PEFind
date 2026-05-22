@@ -70,7 +70,8 @@ PEFindC1.exe -c E:\tmp "Setup"
 
 ## Notes
 
-- Normal ASCII, Unicode, and hex matches use the same result table columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE`.
+- ASCII, Unicode, and hex matches use the same result columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE`.
+- `--count` keeps those result columns and appends `Matches`. Each count row covers one file, so its location and section columns describe the earliest counted match in that file.
 - Invalid PE files and matches outside PE sections are reported in the `isPE` column as `Invalid PE or string not in sections(overlay?)`.
 - Hex patterns must be complete byte pairs and must contain at least one exact byte; all-wildcard patterns are rejected.
 - `--count` and `--nth` are separate output modes and cannot be combined.

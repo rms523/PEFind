@@ -83,11 +83,11 @@ TEST(ScannerProduction, TextAndHexSearchReturnSameMatchShape)
     std::vector<file_info> textMatches;
     std::vector<file_info> hexMatches;
 
-    searchStringinFile(file.utf8Path(), "AB", FALSE, textMatches, FALSE);
+    searchStringinFile(file.utf8Path(), "AB", FALSE, textMatches);
 
     HexPattern hexPattern = parse_hex_pattern("41 42");
     ASSERT_TRUE(hexPattern.isValid);
-    searchStringinFile(file.utf8Path(), "41 42", FALSE, hexMatches, FALSE,
+    searchStringinFile(file.utf8Path(), "41 42", FALSE, hexMatches,
                        FALSE, FALSE, &hexPattern);
 
     EXPECT_EQ(offsets(textMatches), offsets(hexMatches));

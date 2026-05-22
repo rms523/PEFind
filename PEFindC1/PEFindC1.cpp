@@ -75,7 +75,19 @@ _____  ______      ______ _____ _   _ _____   _____
     cout << "Welcome to the PE-FindC" << endl << endl;
 }
 
-static void print_header(std::size_t maxlen)
+static std::size_t result_path_width(const vector<file_info>& all_file_info)
+{
+    size_t maxlen = 0;
+
+    for (const auto& fi : all_file_info) {
+        if (fi.filepath.size() > maxlen) maxlen = fi.filepath.size();
+    }
+
+    if (maxlen < 50) maxlen = 90;
+    return maxlen;
+}
+
+static void print_header(std::size_t maxlen, bool includeMatchCount)
 {
     std::ios_base::fmtflags f(cout.flags());
 
@@ -88,106 +100,79 @@ static void print_header(std::size_t maxlen)
     cout << std::setw(12) << "secOffset";
     cout << std::setw(18) << "secName";
     cout << std::setw(38) << "isPE";
+    if (includeMatchCount) {
+        cout << std::setw(12) << "Matches";
+    }
     cout << endl;
 
     SetConsoleTextAttribute(hConsole, 15);
     cout.flags(f);
 }
 
-void printfunction(const vector<file_info>& all_file_info)
+static void print_row(const file_info& fi, std::size_t maxlen, bool includeMatchCount)
 {
-    size_t maxlen = 0;
-
-    for (const auto& fi : all_file_info) {
-        if (fi.filepath.size() > maxlen) maxlen = fi.filepath.size();
-    }
-
-    if (maxlen < 50) maxlen = 90;
-
-    banner();
-
     std::ios_base::fmtflags f(cout.flags());
-    print_header(maxlen);
-
-    for (const auto& fi : all_file_info) {
-        cout.flags(f);
-        cout << std::setw(maxlen + 5) << std::left << fi.filepath;
-        cout << std::setw(12) << std::uppercase << std::hex << fi.fileoffset;
-        cout << std::setw(12) << std::dec << fi.sectionindex;
-        cout << std::setw(12) << std::uppercase << std::hex << fi.sectionoffset;
-        cout << std::setw(18) << fi.sectionName;
-        cout << std::setw(38) << fi.isPE;
-        cout << endl;
+    cout << std::setw(maxlen + 5) << std::left << fi.filepath;
+    cout << std::setw(12) << std::uppercase << std::hex << fi.fileoffset;
+    cout << std::setw(12) << std::dec << fi.sectionindex;
+    cout << std::setw(12) << std::uppercase << std::hex << fi.sectionoffset;
+    cout << std::setw(18) << fi.sectionName;
+    cout << std::setw(38) << fi.isPE;
+    if (includeMatchCount) {
+        cout << std::setw(12) << fi.stringTosearch;
     }
+    cout << endl;
     cout.flags(f);
 }
 
-// Count-mode output: one row per file with match count
-void print_count_mode(const vector<file_info>& all_file_info)
+static void print_results(const vector<file_info>& all_file_info, bool includeMatchCount)
 {
     banner();
+    const size_t maxlen = result_path_width(all_file_info);
 
-    size_t maxlen = 0;
-    for (const auto& fi : all_file_info) {
-        if (fi.filepath.size() > maxlen) maxlen = fi.filepath.size();
-    }
-    if (maxlen < 40) maxlen = 40;
-
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    FlushConsoleInputBuffer(hConsole);
-    SetConsoleTextAttribute(hConsole, 10);  // Light Green
-
-    cout << std::setw(maxlen + 5) << std::left << "FilePath";
-    cout << std::setw(12) << "Matches";
-    cout << std::setw(18) << "SecName";
-    cout << endl;
-
-    SetConsoleTextAttribute(hConsole, 15);
+    print_header(maxlen, includeMatchCount);
 
     for (const auto& fi : all_file_info) {
-        cout << std::setw(maxlen + 5) << std::left << fi.filepath;
-        cout << std::setw(12) << fi.stringTosearch;  // match count stored here in count mode
-        cout << std::setw(18) << fi.sectionName;
-        cout << endl;
+        print_row(fi, maxlen, includeMatchCount);
     }
 }
 
 // Forward declarations for case-insensitive-aware search dispatchers
 static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
-                            vector<file_info>& results, BOOL stream, BOOL ci,
+                            vector<file_info>& results, BOOL ci,
                             BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
 static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
-                           vector<file_info>& results, BOOL stream, BOOL ci,
+                           vector<file_info>& results, BOOL ci,
                            BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
 
 BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, 
-                 vector<file_info>& all_file_info, BOOL isDir, BOOL stream, BOOL caseInsensitive,
+                 vector<file_info>& all_file_info, BOOL isDir, BOOL caseInsensitive,
                  BOOL countMode, const HexPattern* hexPat)
 {
     if (!isDir) {
-        checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive, countMode, hexPat);
+        checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info, caseInsensitive, countMode, hexPat);
         return true;
     }
 
-    checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, stream, caseInsensitive, countMode, hexPat);
+    checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, caseInsensitive, countMode, hexPat);
     return true;
 }
 
 // File-level search with case-insensitive and hex/count support
 static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
-                            vector<file_info>& results, BOOL stream, BOOL ci,
+                            vector<file_info>& results, BOOL ci,
                             BOOL countMode, const HexPattern* hexPat)
 {
-    searchStringinFile(path, str, isUnicode, results, stream, ci, countMode, hexPat);
+    searchStringinFile(path, str, isUnicode, results, ci, countMode, hexPat);
 }
 
 // Directory-level search with case-insensitive and hex/count support (forwards to recursive calls)
 static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
-                           vector<file_info>& results, BOOL stream, BOOL ci,
+                           vector<file_info>& results, BOOL ci,
                            BOOL countMode, const HexPattern* hexPat)
 {
     try {
-        searchStringInDir(dir, str, isUnicode, results, stream, ci, countMode, hexPat);
+        searchStringInDir(dir, str, isUnicode, results, ci, countMode, hexPat);
     } catch (std::exception const& e) {
         std::cout << "Exception: " << e.what() << std::endl;
     }
@@ -240,7 +225,7 @@ static void merge_count_results_by_file(vector<file_info>& all_file_info)
                 current = 0;
             }
             target.stringTosearch = std::to_string(current + count);
-            if (target.sectionName.empty() && !fi.sectionName.empty()) {
+            if (fi.fileoffset < target.fileoffset) {
                 target.sectionindex = fi.sectionindex;
                 target.sectionoffset = fi.sectionoffset;
                 target.sectionName = fi.sectionName;
@@ -378,12 +363,9 @@ int main(int argc, char** argv)
     }
     BOOL isDir = (targetKind == 1);
 
-    // Keep every mode on the same final rendering path.
-    BOOL stream = FALSE;
-
     if (isHexMode) {
         // Hex pattern mode: search for raw bytes (ignore -a/-u flags)
-        checkString(args.targetPath, args.hexString, FALSE, all_file_info, isDir, stream, 
+        checkString(args.targetPath, args.hexString, FALSE, all_file_info, isDir,
                     FALSE, args.countMode, &hexPat);  // caseInsensitive doesn't apply to hex mode
     } else {
         // Text search mode: use -a/-u flags as before
@@ -396,15 +378,15 @@ int main(int argc, char** argv)
         }
 
         if (doAscii && doUnicode) {
-            checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir, stream, 
+            checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir,
                         args.caseInsensitive, args.countMode, nullptr);
-            checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir, stream, 
+            checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir,
                         args.caseInsensitive, args.countMode, nullptr);
         } else if (doAscii) {
-            checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir, stream, 
+            checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir,
                         args.caseInsensitive, args.countMode, nullptr);
         } else if (doUnicode) {
-            checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir, stream, 
+            checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir,
                         args.caseInsensitive, args.countMode, nullptr);
         }
     }
@@ -421,13 +403,8 @@ int main(int argc, char** argv)
         sortfunction(all_file_info, args.sortPredicate);
     }
 
-    // Print results based on mode
     if (!all_file_info.empty()) {
-        if (args.countMode) {
-            print_count_mode(all_file_info);
-        } else {
-            printfunction(all_file_info);
-        }
+        print_results(all_file_info, args.countMode);
     }
 
     return 0;

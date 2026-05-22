@@ -4,7 +4,6 @@
 
 #include <vector>
 #include <iostream>
-#include <iomanip>
 #include <algorithm>
 #include <cctype>
 #include <cwchar>
@@ -29,20 +28,6 @@ static bool bytesEqualCI(BYTE a, BYTE b)
 {
     return std::tolower(static_cast<unsigned char>(a)) ==
            std::tolower(static_cast<unsigned char>(b));
-}
-
-static void print_row_stream(const file_info& fi)
-{
-    std::ios_base::fmtflags f(std::cout.flags());
-    size_t maxlen = 90;
-    std::cout << std::setw(maxlen + 5) << std::left << fi.filepath;
-    std::cout << std::setw(12) << std::uppercase << std::hex << fi.fileoffset;
-    std::cout << std::setw(12) << std::dec << fi.sectionindex;
-    std::cout << std::setw(12) << std::uppercase << std::hex << fi.sectionoffset;
-    std::cout << std::setw(18) << fi.sectionName;
-    std::cout << std::setw(38) << fi.isPE;
-    std::cout << std::endl;
-    std::cout.flags(f);
 }
 
 static void status_update(const std::string& text)
@@ -171,7 +156,7 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
 
 static void add_match(const string& pathTosearch, DWORD64 globalOffset, int sectionIndex,
                       PIMAGE_SECTION_HEADER sectionHeader, const string& searchStr,
-                      BOOL isPE, vector<file_info>& all_file_info, BOOL stream)
+                      BOOL isPE, vector<file_info>& all_file_info)
 {
     file_info fi;
     fi.filepath = pathTosearch;
@@ -191,8 +176,6 @@ static void add_match(const string& pathTosearch, DWORD64 globalOffset, int sect
 
     fi.stringTosearch = searchStr;
     all_file_info.push_back(fi);
-
-    if (stream) { print_row_stream(fi); }
 }
 
 // Search a single chunk for the pattern.
@@ -254,8 +237,8 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
     }
 }
 
-void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode, 
-                        vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive,
+void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode,
+                        vector<file_info>& all_file_info, BOOL caseInsensitive,
                         BOOL countMode, const HexPattern* hexPat)
 {
     std::wstring widePath = utf8_to_utf16(pathTosearch);
@@ -393,13 +376,13 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
                                                                  globalOffset, sectionIndex);
 
             add_match(pathTosearch, globalOffset, sectionIndex, sectionHeader,
-                      stringTosearch, isPE, all_file_info, stream);
+                      stringTosearch, isPE, all_file_info);
         }
     }
 }
 
-void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode, 
-                        vector<file_info>& all_file_info, BOOL stream, BOOL caseInsensitive,
+void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode,
+                        vector<file_info>& all_file_info, BOOL caseInsensitive,
                         BOOL countMode, const HexPattern* hexPat)
 {
     WIN32_FIND_DATAW findData;
@@ -434,11 +417,11 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
             if (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
                 continue;
             }
-            searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info, stream, 
+            searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info,
                               caseInsensitive, countMode, hexPat);
         } else {
-            if (!stream) status_update(combined_path);
-            searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info, stream, 
+            status_update(combined_path);
+            searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info,
                                caseInsensitive, countMode, hexPat);
         }
     } while (FindNextFileW(hFind, &findData) != 0);
