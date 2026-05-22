@@ -74,22 +74,23 @@ TEST(ParseHexPattern, EmptyString) {
     EXPECT_TRUE(pat.isWildcard.empty());
 }
 
-TEST(ParseHexPattern, SingleCharSkipped) {
-    // "4" alone has no pair — should be skipped
+TEST(ParseHexPattern, SingleCharRejected) {
     auto pat = parse_hex_pattern("4");
     EXPECT_TRUE(pat.bytes.empty());
+    EXPECT_FALSE(pat.isValid);
 }
 
-TEST(ParseHexPattern, OddLengthHex) {
-    // "4D5" → "4D" is valid, "5" is leftover and skipped
+TEST(ParseHexPattern, OddLengthHexRejected) {
     auto pat = parse_hex_pattern("4D5");
-    ASSERT_EQ(pat.bytes.size(), 1u);
-    EXPECT_EQ(pat.bytes[0], 0x4D);
+    EXPECT_TRUE(pat.bytes.empty());
+    EXPECT_FALSE(pat.isValid);
 }
 
 TEST(ParseHexPattern, AllWildcards) {
     auto pat = parse_hex_pattern("xx xx xx");
     ASSERT_EQ(pat.bytes.size(), 3u);
+    EXPECT_TRUE(pat.isValid);
+    EXPECT_FALSE(pat.hasExactByte());
     for (size_t i = 0; i < pat.isWildcard.size(); ++i) {
         EXPECT_TRUE(pat.isWildcard[i]);
     }
@@ -158,11 +159,10 @@ TEST(ParseHexPattern, LongPattern) {
     EXPECT_EQ(pat.bytes[3], 0x00);
 }
 
-TEST(ParseHexPattern, InvalidCharsSkipped) {
-    // "GG" is not valid hex — both chars are skipped
+TEST(ParseHexPattern, InvalidCharsRejected) {
     auto pat = parse_hex_pattern("GG4D");
-    ASSERT_EQ(pat.bytes.size(), 1u);
-    EXPECT_EQ(pat.bytes[0], 0x4D);
+    EXPECT_TRUE(pat.bytes.empty());
+    EXPECT_FALSE(pat.isValid);
 }
 
 TEST(ParseHexPattern, PatternSize) {

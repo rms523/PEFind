@@ -279,7 +279,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         return;
     }
 
-    int isPE = checkPE(header_buf.data()) ? 1 : 0;
+    int isPE = checkPE(header_buf.data(), header_bytes) ? 1 : 0;
 
     bool useHexPattern = (hexPat != nullptr && !hexPat->bytes.empty());
 
@@ -348,25 +348,6 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     std::sort(allOffsets.begin(), allOffsets.end());
     allOffsets.erase(std::unique(allOffsets.begin(), allOffsets.end()), allOffsets.end());
-    if (pattern_len > 0 && allOffsets.size() > 1) {
-        vector<DWORD64> nonOverlappingOffsets;
-        DWORD64 nextAllowedOffset = 0;
-        const DWORD64 patternLen = static_cast<DWORD64>(pattern_len);
-
-        for (DWORD64 offset : allOffsets) {
-            if (offset < nextAllowedOffset) continue;
-
-            nonOverlappingOffsets.push_back(offset);
-            if (offset > (std::numeric_limits<DWORD64>::max)() - patternLen) {
-                nextAllowedOffset = (std::numeric_limits<DWORD64>::max)();
-            } else {
-                nextAllowedOffset = offset + patternLen;
-            }
-        }
-
-        allOffsets.swap(nonOverlappingOffsets);
-    }
-
     // Emit results based on mode
     if (countMode && !allOffsets.empty()) {
         // Count mode: one entry per file with total match count
@@ -420,7 +401,8 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
     hFind = FindFirstFileA(full_path.c_str(), &findData);
 
     if (hFind == INVALID_HANDLE_VALUE) {
-        throw std::runtime_error("Invalid handle value! Please check your path...");
+        std::cout << std::endl << "Skipping directory: " << directory << std::endl;
+        return;
     }
 
     HandleGuard findGuard(hFind);
@@ -435,6 +417,9 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
         combined_path += findData.cFileName;
 
         if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+                continue;
+            }
             searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info, stream, 
                               caseInsensitive, countMode, hexPat);
         } else {

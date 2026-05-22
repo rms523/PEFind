@@ -21,8 +21,12 @@
 struct HexPattern {
     std::vector<uint8_t> bytes;      // byte values (valid only if !isWildcard[i])
     std::vector<bool> isWildcard;    // true if this position matches any byte
+    bool isValid = true;
     
     size_t size() const { return bytes.size(); }
+    bool hasExactByte() const {
+        return std::find(isWildcard.begin(), isWildcard.end(), false) != isWildcard.end();
+    }
 };
 
 // Parse hex string into HexPattern. Supports:
@@ -32,10 +36,15 @@ struct HexPattern {
 inline HexPattern parse_hex_pattern(const std::string& hexStr) {
     HexPattern pattern;
     
-    // Remove spaces first
+    // Remove whitespace first so grouped patterns remain easy to read.
     std::string cleaned;
     for (char c : hexStr) {
-        if (c != ' ') cleaned += c;
+        if (!std::isspace(static_cast<unsigned char>(c))) cleaned += c;
+    }
+
+    if (cleaned.empty() || cleaned.size() % 2 != 0) {
+        pattern.isValid = false;
+        return pattern;
     }
     
     size_t i = 0;
@@ -55,18 +64,30 @@ inline HexPattern parse_hex_pattern(const std::string& hexStr) {
             uint8_t high, low;
             if (h >= '0' && h <= '9') high = static_cast<uint8_t>(h - '0');
             else if (h >= 'A' && h <= 'F') high = static_cast<uint8_t>(h - 'A' + 10);
-            else { ++i; continue; }
+            else {
+                pattern.isValid = false;
+                pattern.bytes.clear();
+                pattern.isWildcard.clear();
+                return pattern;
+            }
             
             if (l >= '0' && l <= '9') low = static_cast<uint8_t>(l - '0');
             else if (l >= 'A' && l <= 'F') low = static_cast<uint8_t>(l - 'A' + 10);
-            else { ++i; continue; }
+            else {
+                pattern.isValid = false;
+                pattern.bytes.clear();
+                pattern.isWildcard.clear();
+                return pattern;
+            }
             
             pattern.bytes.push_back(static_cast<uint8_t>((high << 4) | low));
             pattern.isWildcard.push_back(false);
             i += 2;
         } else {
-            // Single remaining character - skip it
-            ++i;
+            pattern.isValid = false;
+            pattern.bytes.clear();
+            pattern.isWildcard.clear();
+            return pattern;
         }
     }
     
@@ -130,7 +151,7 @@ inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen
     while (i <= haystackLen - needleLen) {
         size_t j = needleLen;
         while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) { --j; }
-        if (j == 0) { positions.push_back(static_cast<int>(i)); i += needleLen; }
+        if (j == 0) { positions.push_back(static_cast<int>(i)); ++i; }
         else { i += skip[static_cast<uint8_t>(haystack[i + needleLen - 1])]; }
     }
     return positions;
@@ -174,19 +195,7 @@ inline std::vector<uint64_t> find_all_bmh_chunked(const uint8_t* haystack, size_
     std::sort(positions.begin(), positions.end());
     positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
 
-    std::vector<uint64_t> nonOverlapping;
-    uint64_t nextAllowedOffset = 0;
-    for (uint64_t pos : positions) {
-        if (pos < nextAllowedOffset) continue;
-
-        nonOverlapping.push_back(pos);
-        if (pos > (std::numeric_limits<uint64_t>::max)() - static_cast<uint64_t>(needleLen)) {
-            nextAllowedOffset = (std::numeric_limits<uint64_t>::max)();
-        } else {
-            nextAllowedOffset = pos + static_cast<uint64_t>(needleLen);
-        }
-    }
-    return nonOverlapping;
+    return positions;
 }
 
 // Find all occurrences of a hex pattern (with optional wildcards) using sliding window.
@@ -198,10 +207,7 @@ inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t 
     int needleLen = static_cast<int>(pattern.bytes.size());
     if (needleLen > static_cast<int>(haystackLen)) return positions;
 
-    // Check for at least one non-wildcard byte
-    bool hasNonWildcard = false;
-    for (bool isW : pattern.isWildcard) { if (!isW) { hasNonWildcard = true; break; } }
-    if (!hasNonWildcard) return positions;
+    if (!pattern.hasExactByte()) return positions;
 
     for (size_t i = 0; i <= haystackLen - static_cast<size_t>(needleLen); ++i) {
         bool match = true;
@@ -210,7 +216,7 @@ inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t 
                 match = false;
             }
         }
-        if (match) { positions.push_back(static_cast<int>(i)); i += static_cast<size_t>(needleLen - 1); }
+        if (match) positions.push_back(static_cast<int>(i));
     }
     return positions;
 }

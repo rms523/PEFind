@@ -8,4 +8,4 @@ bool is64bit(const BYTE* pe_buffer);
 IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, DWORD dir_id);
 ULONGLONG get_module_base(const BYTE* pe_buffer);
 PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_size, DWORD64 globalOffset, int &sectionIndex);
-BOOL checkPE(const BYTE* buf);
+BOOL checkPE(const BYTE* buf, size_t buffer_size);

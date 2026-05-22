@@ -363,7 +363,7 @@ int main(int argc, char** argv)
 
     if (isHexMode) {
         hexPat = parse_hex_pattern(args.hexString);
-        if (hexPat.bytes.empty()) {
+        if (!hexPat.isValid || hexPat.bytes.empty() || !hexPat.hasExactByte()) {
             cout << "Error: could not parse hex pattern \"" << args.hexString << "\"" << endl;
             return 1;
         }
@@ -379,6 +379,10 @@ int main(int argc, char** argv)
 
     // In count and nth-match modes, collect results then print at end.
     BOOL stream = (args.sortPredicate < 0) && !args.countMode && args.nthMatch == 0;
+    if (stream) {
+        banner();
+        print_header(90);
+    }
 
     if (isHexMode) {
         // Hex pattern mode: search for raw bytes (ignore -a/-u flags)
@@ -424,7 +428,7 @@ int main(int argc, char** argv)
     if (!all_file_info.empty()) {
         if (args.countMode) {
             print_count_mode(all_file_info);
-        } else {
+        } else if (!stream) {
             printfunction(all_file_info);
         }
     }

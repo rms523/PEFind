@@ -133,14 +133,16 @@ TEST(BMHFindAll, NeedleLongerThanHaystack) {
     EXPECT_TRUE(positions.empty());
 }
 
-TEST(BMHFindAll, OverlappingPatternNonOverlappingResult) {
-    // Pattern "aaa" in "aaaaa": non-overlapping search should find the first full occurrence only.
+TEST(BMHFindAll, OverlappingPatternReturnsEveryStart) {
+    // Pattern "aaa" in "aaaaa" starts at offsets 0, 1, and 2.
     const uint8_t haystack[] = {'a', 'a', 'a', 'a', 'a'};
     const uint8_t needle[]   = {'a', 'a', 'a'};
     
     auto positions = find_all_bmh(haystack, 5, needle, 3, [](uint8_t a, uint8_t b) { return a == b; });
-    ASSERT_EQ(positions.size(), 1u);
+    ASSERT_EQ(positions.size(), 3u);
     EXPECT_EQ(positions[0], 0);
+    EXPECT_EQ(positions[1], 1);
+    EXPECT_EQ(positions[2], 2);
 }
 
 TEST(BMHFindAll, CaseSensitiveByDefault) {
@@ -177,14 +179,15 @@ TEST(BMHFindAll, LargeDataPerformance) {
 }
 
 TEST(BMHFindAll, PatternAtEveryPosition) {
-    // "aaaa" in "aaaaaaaa" — non-overlapping should find positions 0, 4
+    // "aaaa" in "aaaaaaaa" starts at every offset through 4.
     const uint8_t haystack[] = {'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a'};
     const uint8_t needle[]   = {'a', 'a', 'a', 'a'};
     
     auto positions = find_all_bmh(haystack, 8, needle, 4, [](uint8_t a, uint8_t b) { return a == b; });
-    ASSERT_EQ(positions.size(), 2u);
-    EXPECT_EQ(positions[0], 0);
-    EXPECT_EQ(positions[1], 4);
+    ASSERT_EQ(positions.size(), 5u);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(positions[static_cast<size_t>(i)], i);
+    }
 }
 
 TEST(BMHFindAll, CaseInsensitiveSearch) {
@@ -281,15 +284,17 @@ TEST(BMHFindAllChunked, FindsBoundaryMatchAfterEarlierMatch) {
     EXPECT_EQ(positions[1], 7u);
 }
 
-TEST(BMHFindAllChunked, DoesNotReintroduceOverlappingMatchFromOverlapWindow) {
+TEST(BMHFindAllChunked, ReturnsOverlappingMatchesAcrossOverlapWindow) {
     const uint8_t haystack[] = {'a', 'a', 'a', 'a', 'a'};
     const uint8_t needle[] = {'a', 'a', 'a'};
 
     auto positions = find_all_bmh_chunked(haystack, sizeof(haystack), needle, sizeof(needle), 4,
                                           [](uint8_t a, uint8_t b) { return a == b; });
 
-    ASSERT_EQ(positions.size(), 1u);
+    ASSERT_EQ(positions.size(), 3u);
     EXPECT_EQ(positions[0], 0u);
+    EXPECT_EQ(positions[1], 1u);
+    EXPECT_EQ(positions[2], 2u);
 }
 
 TEST(BMHFindAllChunked, RejectsZeroChunkSize) {
@@ -345,9 +350,11 @@ TEST(BMHFindAll, BMHAdvantageOverNaive) {
     
     auto positions = find_all_bmh(haystack.data(), 1000, needle, 5, 
                                    [](uint8_t a, uint8_t b) { return a == b; });
-    // Should find matches at 0, 5, 10, ... (non-overlapping)
-    EXPECT_GT(positions.size(), 0u);
+    // Every start offset before the final mismatching byte should be reported.
+    ASSERT_EQ(positions.size(), 995u);
+    EXPECT_EQ(positions.front(), 0);
+    EXPECT_EQ(positions.back(), 994);
     for (size_t i = 1; i < positions.size(); ++i) {
-        EXPECT_EQ(positions[i] - positions[i-1], 5); // Non-overlapping spacing
+        EXPECT_EQ(positions[i] - positions[i-1], 1);
     }
 }

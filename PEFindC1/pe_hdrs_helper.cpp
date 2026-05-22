@@ -18,6 +18,25 @@ BYTE* get_nt_hrds(const BYTE* pe_buffer)
     return nt_ptr;
 }
 
+static BYTE* get_nt_hdrs_checked(const BYTE* pe_buffer, size_t buffer_size)
+{
+    if (pe_buffer == NULL || buffer_size < sizeof(IMAGE_DOS_HEADER)) return NULL;
+
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(pe_buffer);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
+
+    const LONG kMaxOffset = 65536;
+    LONG pe_offset = idh->e_lfanew;
+    if (pe_offset < 0 || pe_offset > kMaxOffset) return NULL;
+
+    size_t nt_offset = static_cast<size_t>(pe_offset);
+    if (nt_offset > buffer_size || buffer_size - nt_offset < sizeof(DWORD)) return NULL;
+
+    BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + nt_offset;
+    if (reinterpret_cast<const DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
+    return nt_ptr;
+}
+
 IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer)
 {
     BYTE* ptr = get_nt_hrds(pe_buffer);
@@ -96,7 +115,7 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
 {
     if (payload == NULL) return NULL;
 
-    const BYTE* nt_hdr = get_nt_hrds(payload);
+    const BYTE* nt_hdr = get_nt_hdrs_checked(payload, buffer_size);
     if (nt_hdr == NULL) {
         return NULL;
     }
@@ -164,8 +183,12 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
     return NULL;
 }
 
-BOOL checkPE(const BYTE* buf) 
+BOOL checkPE(const BYTE* buf, size_t buffer_size)
 {
+    if (buf == NULL || buffer_size < sizeof(IMAGE_DOS_HEADER)) {
+        return false;
+    }
+
     const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
     if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
         return false;

@@ -122,7 +122,7 @@ TEST(WildcardSearch, WildcardAtEnd) {
 }
 
 TEST(WildcardSearch, OverlappingMatches) {
-    // Pattern: xx 5A — in "AB 5A CD 5A" should find positions 0 and 2 (non-overlapping by design of sliding window)
+    // Pattern: xx 5A — in "AB 5A CD 5A" should find positions 0 and 2.
     const uint8_t haystack[] = {0xAB, 0x5A, 0xCD, 0x5A};
     HexPattern pattern;
     pattern.bytes     = {0x00, 0x5A};
@@ -132,6 +132,18 @@ TEST(WildcardSearch, OverlappingMatches) {
     ASSERT_EQ(positions.size(), 2u);
     EXPECT_EQ(positions[0], 0);
     EXPECT_EQ(positions[1], 2);
+}
+
+TEST(WildcardSearch, OverlappingExactStarts) {
+    const uint8_t haystack[] = {0xAB, 0xAB, 0xAB};
+    HexPattern pattern;
+    pattern.bytes = {0xAB, 0xAB};
+    pattern.isWildcard = {false, false};
+
+    auto positions = find_all_with_wildcards(haystack, 3, pattern);
+    ASSERT_EQ(positions.size(), 2u);
+    EXPECT_EQ(positions[0], 0);
+    EXPECT_EQ(positions[1], 1);
 }
 
 TEST(WildcardSearch, LargeHaystack) {
