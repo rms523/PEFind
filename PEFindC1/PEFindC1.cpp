@@ -137,42 +137,89 @@ static void print_results(const vector<file_info>& all_file_info, bool includeMa
     }
 }
 
+static void print_statistics(const ScanStats& stats, size_t resultRows)
+{
+    std::ios_base::fmtflags f(cout.flags());
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    cout << endl;
+    SetConsoleTextAttribute(hConsole, 10);
+    cout << "Statistics" << endl;
+    SetConsoleTextAttribute(hConsole, 15);
+    cout << "Files scanned: " << std::dec << stats.filesScanned() << endl;
+    cout << "Files with matches: " << stats.filesWithMatches() << endl;
+    cout << "Matches found: " << stats.matchesFound << endl;
+    cout << "Result rows: " << resultRows << endl;
+    cout << "Files with scan errors: " << stats.filesWithErrors() << endl;
+    cout.flags(f);
+}
+
+class LiveResultPrinter {
+public:
+    explicit LiveResultPrinter(bool includeMatchCount) : includeMatchCount_(includeMatchCount) {}
+
+    void print(const file_info& fi)
+    {
+        if (!started_) {
+            banner();
+            print_header(LIVE_PATH_WIDTH, includeMatchCount_);
+            started_ = true;
+        }
+
+        print_row(fi, LIVE_PATH_WIDTH, includeMatchCount_);
+    }
+
+private:
+    static constexpr std::size_t LIVE_PATH_WIDTH = 90;
+    bool includeMatchCount_;
+    bool started_ = false;
+};
+
 // Forward declarations for case-insensitive-aware search dispatchers
 static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
                             vector<file_info>& results, BOOL ci,
-                            BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
+                            BOOL countMode = FALSE, const HexPattern* hexPat = nullptr,
+                            const ResultCallback& onResult = ResultCallback{},
+                            ScanStats* stats = nullptr);
 static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
                            vector<file_info>& results, BOOL ci,
-                           BOOL countMode = FALSE, const HexPattern* hexPat = nullptr);
+                           BOOL countMode = FALSE, const HexPattern* hexPat = nullptr,
+                           const ResultCallback& onResult = ResultCallback{},
+                           ScanStats* stats = nullptr);
 
 BOOL checkString(const string pathTosearch, const string stringTosearch, BOOL isUnicode, 
                  vector<file_info>& all_file_info, BOOL isDir, BOOL caseInsensitive,
-                 BOOL countMode, const HexPattern* hexPat)
+                 BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
+                 ScanStats* stats)
 {
     if (!isDir) {
-        checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info, caseInsensitive, countMode, hexPat);
+        checkStringFile(pathTosearch, stringTosearch, isUnicode, all_file_info,
+                        caseInsensitive, countMode, hexPat, onResult, stats);
         return true;
     }
 
-    checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info, caseInsensitive, countMode, hexPat);
+    checkStringDir(pathTosearch, stringTosearch, isUnicode, all_file_info,
+                   caseInsensitive, countMode, hexPat, onResult, stats);
     return true;
 }
 
 // File-level search with case-insensitive and hex/count support
 static void checkStringFile(const string& path, const string& str, BOOL isUnicode, 
                             vector<file_info>& results, BOOL ci,
-                            BOOL countMode, const HexPattern* hexPat)
+                            BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
+                            ScanStats* stats)
 {
-    searchStringinFile(path, str, isUnicode, results, ci, countMode, hexPat);
+    searchStringinFile(path, str, isUnicode, results, ci, countMode, hexPat, onResult, stats);
 }
 
 // Directory-level search with case-insensitive and hex/count support (forwards to recursive calls)
 static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
                            vector<file_info>& results, BOOL ci,
-                           BOOL countMode, const HexPattern* hexPat)
+                           BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
+                           ScanStats* stats)
 {
     try {
-        searchStringInDir(dir, str, isUnicode, results, ci, countMode, hexPat);
+        searchStringInDir(dir, str, isUnicode, results, ci, countMode, hexPat, onResult, stats);
     } catch (std::exception const& e) {
         std::cout << "Exception: " << e.what() << std::endl;
     }
@@ -342,6 +389,7 @@ int main(int argc, char** argv)
     }
 
     vector<file_info> all_file_info;
+    ScanStats scanStats;
 
     // Determine search mode: hex pattern vs text-based (ASCII/Unicode)
     HexPattern hexPat;
@@ -363,10 +411,20 @@ int main(int argc, char** argv)
     }
     BOOL isDir = (targetKind == 1);
 
+    const bool printLive = args.sortPredicate < 0 && !args.countMode && args.nthMatch == 0;
+    LiveResultPrinter liveResults(false);
+    ResultCallback onResult;
+    if (printLive) {
+        onResult = [&liveResults](const file_info& fi) {
+            liveResults.print(fi);
+        };
+    }
+
     if (isHexMode) {
         // Hex pattern mode: search for raw bytes (ignore -a/-u flags)
         checkString(args.targetPath, args.hexString, FALSE, all_file_info, isDir,
-                    FALSE, args.countMode, &hexPat);  // caseInsensitive doesn't apply to hex mode
+                    FALSE, args.countMode, &hexPat, onResult,
+                    &scanStats);  // caseInsensitive doesn't apply to hex mode
     } else {
         // Text search mode: use -a/-u flags as before
         bool doAscii = (args.mode & static_cast<int>(SM_ASCII)) != 0;
@@ -379,15 +437,15 @@ int main(int argc, char** argv)
 
         if (doAscii && doUnicode) {
             checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir,
-                        args.caseInsensitive, args.countMode, nullptr);
+                        args.caseInsensitive, args.countMode, nullptr, onResult, &scanStats);
             checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir,
-                        args.caseInsensitive, args.countMode, nullptr);
+                        args.caseInsensitive, args.countMode, nullptr, onResult, &scanStats);
         } else if (doAscii) {
             checkString(args.targetPath, args.searchString, FALSE, all_file_info, isDir,
-                        args.caseInsensitive, args.countMode, nullptr);
+                        args.caseInsensitive, args.countMode, nullptr, onResult, &scanStats);
         } else if (doUnicode) {
             checkString(args.targetPath, args.searchString, TRUE,  all_file_info, isDir,
-                        args.caseInsensitive, args.countMode, nullptr);
+                        args.caseInsensitive, args.countMode, nullptr, onResult, &scanStats);
         }
     }
 
@@ -403,9 +461,11 @@ int main(int argc, char** argv)
         sortfunction(all_file_info, args.sortPredicate);
     }
 
-    if (!all_file_info.empty()) {
+    if (!printLive && !all_file_info.empty()) {
         print_results(all_file_info, args.countMode);
     }
+
+    print_statistics(scanStats, all_file_info.size());
 
     return 0;
 }

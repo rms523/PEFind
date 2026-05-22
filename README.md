@@ -71,6 +71,8 @@ PEFindC1.exe -c E:\tmp "Setup"
 ## Notes
 
 - ASCII, Unicode, and hex matches use the same result columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE`.
+- Unsorted per-match searches print rows as files finish scanning. `--sort`, `--count`, and `--nth` render after the scan so their results can be sorted or consolidated first.
+- Every scan ends with statistics for scanned files, files with matches, matches found, displayed result rows, and files with scan errors.
 - `--count` keeps those result columns and appends `Matches`. Each count row covers one file, so its location and section columns describe the earliest counted match in that file.
 - Invalid PE files and matches outside PE sections are reported in the `isPE` column as `Invalid PE or string not in sections(overlay?)`.
 - Hex patterns must be complete byte pairs and must contain at least one exact byte; all-wildcard patterns are rejected.

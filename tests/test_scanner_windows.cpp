@@ -96,3 +96,24 @@ TEST(ScannerProduction, TextAndHexSearchReturnSameMatchShape)
     EXPECT_EQ(textMatches[0].isPE, hexMatches[0].isPE);
     EXPECT_EQ(textMatches[0].sectionName, hexMatches[0].sectionName);
 }
+
+TEST(ScannerProduction, ResultCallbackReceivesMatchesAsFileCompletes)
+{
+    TempFile file(std::vector<BYTE>{'X', 'A', 'B', 'A', 'B'});
+    ASSERT_FALSE(file.utf8Path().empty());
+
+    std::vector<file_info> matches;
+    std::vector<DWORD64> emittedOffsets;
+    ScanStats stats;
+    searchStringinFile(file.utf8Path(), "AB", FALSE, matches, FALSE, FALSE, nullptr,
+                       [&emittedOffsets](const file_info& match) {
+                           emittedOffsets.push_back(match.fileoffset);
+                       }, &stats);
+
+    EXPECT_EQ(emittedOffsets, offsets(matches));
+    EXPECT_EQ(emittedOffsets, (std::vector<DWORD64>{1, 3}));
+    EXPECT_EQ(stats.filesScanned(), 1u);
+    EXPECT_EQ(stats.filesWithMatches(), 1u);
+    EXPECT_EQ(stats.matchesFound, 2u);
+    EXPECT_EQ(stats.filesWithErrors(), 0u);
+}

@@ -156,7 +156,7 @@ static DWORD read_pe_header(HANDLE hFile, std::vector<BYTE>& outBuf)
 
 static void add_match(const string& pathTosearch, DWORD64 globalOffset, int sectionIndex,
                       PIMAGE_SECTION_HEADER sectionHeader, const string& searchStr,
-                      BOOL isPE, vector<file_info>& all_file_info)
+                      BOOL isPE, vector<file_info>& all_file_info, const ResultCallback& onResult)
 {
     file_info fi;
     fi.filepath = pathTosearch;
@@ -176,6 +176,9 @@ static void add_match(const string& pathTosearch, DWORD64 globalOffset, int sect
 
     fi.stringTosearch = searchStr;
     all_file_info.push_back(fi);
+    if (onResult) {
+        onResult(all_file_info.back());
+    }
 }
 
 // Search a single chunk for the pattern.
@@ -239,11 +242,13 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
 
 void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode,
                         vector<file_info>& all_file_info, BOOL caseInsensitive,
-                        BOOL countMode, const HexPattern* hexPat)
+                        BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
+                        ScanStats* stats)
 {
     std::wstring widePath = utf8_to_utf16(pathTosearch);
     if (widePath.empty() && !pathTosearch.empty()) {
         std::cout << "Failed to convert path: " << pathTosearch.c_str() << std::endl;
+        if (stats) stats->recordFailure(pathTosearch);
         return;
     }
 
@@ -252,6 +257,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     if (hHandle == INVALID_HANDLE_VALUE) {
         std::cout << "Failed to Open file: " << pathTosearch.c_str() << std::endl;
+        if (stats) stats->recordFailure(pathTosearch);
         return;
     }
 
@@ -260,6 +266,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
     LARGE_INTEGER size;
     if (!GetFileSizeEx(hHandle, &size)) {
         std::cout << "Unable to get file size" << std::endl;
+        if (stats) stats->recordFailure(pathTosearch);
         return;
     }
 
@@ -268,6 +275,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     if (header_bytes == 0) {
         std::cout << "File header read failed!" << std::endl;
+        if (stats) stats->recordFailure(pathTosearch);
         return;
     }
 
@@ -286,7 +294,11 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
         if (isUnicode) {
             std::wstring widePattern = utf8_to_utf16(stringTosearch);
-            if (widePattern.empty()) { std::cout << "Unicode conversion failed" << std::endl; return; }
+            if (widePattern.empty()) {
+                std::cout << "Unicode conversion failed" << std::endl;
+                if (stats) stats->recordFailure(pathTosearch);
+                return;
+            }
             wpat.assign(widePattern.begin(), widePattern.end());
             pattern = reinterpret_cast<const BYTE*>(wpat.data());
             pattern_len = static_cast<int>(wpat.size() * sizeof(WCHAR));
@@ -321,6 +333,7 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         DWORD bytesRead = 0;
         if (!ReadFile(hHandle, buf.data() + overlap_len, CHUNK_SIZE, &bytesRead, NULL)) {
             std::cout << "File reading failed!" << std::endl;
+            if (stats) stats->recordFailure(pathTosearch);
             return;
         }
         if (bytesRead == 0) break;
@@ -339,6 +352,10 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     std::sort(allOffsets.begin(), allOffsets.end());
     allOffsets.erase(std::unique(allOffsets.begin(), allOffsets.end()), allOffsets.end());
+    if (stats) {
+        stats->recordFile(pathTosearch, allOffsets.size());
+    }
+
     // Emit results based on mode
     if (countMode && !allOffsets.empty()) {
         // Count mode: one entry per file with total match count
@@ -367,6 +384,9 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         }
 
         all_file_info.push_back(fi);
+        if (onResult) {
+            onResult(all_file_info.back());
+        }
     } else {
         // Normal mode: one entry per match (existing behavior)
         for (DWORD64 globalOffset : allOffsets) {
@@ -376,14 +396,15 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
                                                                  globalOffset, sectionIndex);
 
             add_match(pathTosearch, globalOffset, sectionIndex, sectionHeader,
-                      stringTosearch, isPE, all_file_info);
+                      stringTosearch, isPE, all_file_info, onResult);
         }
     }
 }
 
 void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode,
                         vector<file_info>& all_file_info, BOOL caseInsensitive,
-                        BOOL countMode, const HexPattern* hexPat)
+                        BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
+                        ScanStats* stats)
 {
     WIN32_FIND_DATAW findData;
     HANDLE hFind = INVALID_HANDLE_VALUE;
@@ -418,11 +439,13 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
                 continue;
             }
             searchStringInDir(combined_path, stringTosearch, isUnicode, all_file_info,
-                              caseInsensitive, countMode, hexPat);
+                              caseInsensitive, countMode, hexPat, onResult, stats);
         } else {
-            status_update(combined_path);
+            if (!onResult) {
+                status_update(combined_path);
+            }
             searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info,
-                               caseInsensitive, countMode, hexPat);
+                               caseInsensitive, countMode, hexPat, onResult, stats);
         }
     } while (FindNextFileW(hFind, &findData) != 0);
 }
