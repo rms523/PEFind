@@ -26,7 +26,7 @@ static std::wstring multibyte_to_utf16(const std::string& text, UINT codePage, D
 
     std::wstring wide(static_cast<size_t>(length), L'\0');
     if (MultiByteToWideChar(codePage, flags, text.c_str(), static_cast<int>(text.size()),
-                            wide.data(), length) != length) {
+                            &wide[0], length) != length) {
         return {};
     }
 
@@ -52,7 +52,7 @@ std::string utf16_to_utf8(const std::wstring& text)
 
     std::string utf8(static_cast<size_t>(length), '\0');
     if (WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
-                            utf8.data(), length, nullptr, nullptr) != length) {
+                            &utf8[0], length, nullptr, nullptr) != length) {
         return {};
     }
 
