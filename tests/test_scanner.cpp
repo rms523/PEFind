@@ -137,8 +137,8 @@ TEST(ScannerProduction, TextAndHexSearchReturnSameMatchShape)
     EXPECT_EQ(offsets(textMatches), offsets(hexMatches));
     ASSERT_EQ(textMatches.size(), 2u);
     ASSERT_EQ(hexMatches.size(), 2u);
-    EXPECT_EQ(textMatches[0].isPE, "Not a PE or ELF file.");
-    EXPECT_EQ(textMatches[0].isPE, hexMatches[0].isPE);
+    EXPECT_EQ(textMatches[0].format, "Not a PE or ELF file.");
+    EXPECT_EQ(textMatches[0].format, hexMatches[0].format);
     EXPECT_EQ(textMatches[0].sectionName, hexMatches[0].sectionName);
 }
 
@@ -218,6 +218,6 @@ TEST(ScannerProduction, ElfMatchReportsSectionName)
     ASSERT_EQ(matches.size(), 1u);
     EXPECT_EQ(matches[0].fileoffset, static_cast<uint64_t>(text_off));
     EXPECT_EQ(matches[0].sectionName, ".text");
-    EXPECT_EQ(matches[0].isPE, "ELF");
+    EXPECT_EQ(matches[0].format, "ELF");
     EXPECT_EQ(matches[0].sectionindex, 1);
 }

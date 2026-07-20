@@ -33,7 +33,7 @@ gtest_discover_tests(test_scanner)
 add_test(NAME cli_ascii_result_columns
     COMMAND $<TARGET_FILE:PEFind> -a "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
 set_tests_properties(cli_ascii_result_columns PROPERTIES
-    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE")
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format")
 
 add_test(NAME cli_ascii_statistics
     COMMAND $<TARGET_FILE:PEFind> -a "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
@@ -43,17 +43,17 @@ set_tests_properties(cli_ascii_statistics PROPERTIES
 add_test(NAME cli_hex_result_columns
     COMMAND $<TARGET_FILE:PEFind> --hex "50 45 46 69 6E 64" "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
 set_tests_properties(cli_hex_result_columns PROPERTIES
-    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE")
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format")
 
 add_test(NAME cli_hex_count_result_columns
     COMMAND $<TARGET_FILE:PEFind> --hex "50 45 46 69 6E 64" -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
 set_tests_properties(cli_hex_count_result_columns PROPERTIES
-    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE.*Matches")
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format.*Matches")
 
 add_test(NAME cli_ascii_count_result_columns
     COMMAND $<TARGET_FILE:PEFind> -a -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
 set_tests_properties(cli_ascii_count_result_columns PROPERTIES
-    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*isPE.*Matches")
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format.*Matches")
 
 add_test(NAME cli_reject_count_with_nth
     COMMAND $<TARGET_FILE:PEFind> -c -n 1 "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")

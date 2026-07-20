@@ -101,12 +101,12 @@ static void add_match(const string& pathTosearch, uint64_t globalOffset, const S
         fi.sectionindex = section.index;
         fi.sectionoffset = section.section_offset;
         fi.sectionName = section.name;
-        fi.isPE = format_label(format);
+        fi.format = format_label(format);
     } else {
         fi.sectionindex = 0;
         fi.sectionoffset = 0;
         fi.sectionName = "";
-        fi.isPE = outside_section_label(format);
+        fi.format = outside_section_label(format);
     }
 
     all_file_info.push_back(fi);
@@ -345,12 +345,12 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             fi.sectionindex = section.index;
             fi.sectionoffset = section.section_offset;
             fi.sectionName = section.name;
-            fi.isPE = format_label(format);
+            fi.format = format_label(format);
         } else {
             fi.sectionindex = 0;
             fi.sectionoffset = 0;
             fi.sectionName = "";
-            fi.isPE = outside_section_label(format);
+            fi.format = outside_section_label(format);
         }
 
         all_file_info.push_back(fi);

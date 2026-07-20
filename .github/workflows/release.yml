@@ -80,6 +80,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item $exe.FullName dist/${{ matrix.exe_name }}
           Copy-Item README.md dist/README.md
+          Copy-Item LICENSE dist/LICENSE
           Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }} -Force
 
       - name: Package (Unix)
@@ -95,6 +96,7 @@ jobs:
           mkdir -p dist
           cp "$exe" "dist/${{ matrix.exe_name }}"
           cp README.md dist/README.md
+          cp LICENSE dist/LICENSE
           tar -czf "${{ matrix.artifact_name }}" -C dist .
 
       - name: Upload release asset

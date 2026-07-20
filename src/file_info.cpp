@@ -11,7 +11,7 @@ bool compare_secOffset(const file_info& x, const file_info& y) { return x.sectio
 
 bool compare_secName(const file_info& x, const file_info& y) { return x.sectionName < y.sectionName; }
 
-bool compare_isPE(const file_info& x, const file_info& y) { return x.isPE < y.isPE; }
+bool compare_format(const file_info& x, const file_info& y) { return x.format < y.format; }
 
 int checkFile(const std::string& pathTosearch)
 {

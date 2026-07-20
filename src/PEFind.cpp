@@ -55,7 +55,7 @@ void info_banner()
     cout << "  --hex <pattern>                         search for hex pattern (e.g. \"4D5A9000\" or \"xx xx 90 00\")" << endl;
     cout << "  -s, --sort <n>                          sort results by predicate:" << endl;
     cout << "      0 = filepath, 1 = fileOffset, 2 = sectionIndex," << endl;
-    cout << "      3 = sectionOffset, 4 = sectionName, 5 = isPE" << endl;
+    cout << "      3 = sectionOffset, 4 = sectionName, 5 = Format" << endl;
     cout << "  -h, --help                              show this help message" << endl;
     cout << endl;
     cout << "Examples:" << endl;
@@ -110,7 +110,7 @@ static void print_header(std::size_t maxlen, bool includeMatchCount)
     cout << std::setw(12) << "SecIndex";
     cout << std::setw(12) << "secOffset";
     cout << std::setw(18) << "secName";
-    cout << std::setw(38) << "isPE";
+    cout << std::setw(38) << "Format";
     if (includeMatchCount) {
         cout << std::setw(12) << "Matches";
     }
@@ -128,7 +128,7 @@ static void print_row(const file_info& fi, std::size_t maxlen, bool includeMatch
     cout << std::setw(12) << std::dec << fi.sectionindex;
     cout << std::setw(12) << std::uppercase << std::hex << fi.sectionoffset;
     cout << std::setw(18) << fi.sectionName;
-    cout << std::setw(38) << fi.isPE;
+    cout << std::setw(38) << fi.format;
     if (includeMatchCount) {
         cout << std::setw(12) << fi.stringTosearch;
     }
@@ -286,7 +286,7 @@ static void merge_count_results_by_file(vector<file_info>& all_file_info)
                 target.sectionindex = fi.sectionindex;
                 target.sectionoffset = fi.sectionoffset;
                 target.sectionName = fi.sectionName;
-                target.isPE = fi.isPE;
+                target.format = fi.format;
                 target.fileoffset = fi.fileoffset;
             }
         }
@@ -303,7 +303,7 @@ void sortfunction(vector<file_info>& all_file_info, int predicate)
     case 2: sort(all_file_info.begin(), all_file_info.end(), compare_secIndex); break;
     case 3: sort(all_file_info.begin(), all_file_info.end(), compare_secOffset); break;
     case 4: sort(all_file_info.begin(), all_file_info.end(), compare_secName); break;
-    case 5: sort(all_file_info.begin(), all_file_info.end(), compare_isPE); break;
+    case 5: sort(all_file_info.begin(), all_file_info.end(), compare_format); break;
     default: cout << "Please provide valid sort parameter (0-5)." << endl; break;
     }
 }
