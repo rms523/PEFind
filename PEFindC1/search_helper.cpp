@@ -379,8 +379,8 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
             fi.sectionindex = 0;
             fi.sectionoffset = 0;
             fi.sectionName = "";
-            if (isPE) fi.isPE = "Overlay";
-            else fi.isPE = "Not PE";
+            if (isPE) fi.isPE = "Invalid PE or string not in sections(overlay?)";
+            else fi.isPE = "Not a PE file.";
         }
 
         all_file_info.push_back(fi);

@@ -46,7 +46,6 @@ inline HexPattern parse_hex_pattern(const std::string& hexStr) {
         pattern.isValid = false;
         return pattern;
     }
-    
     size_t i = 0;
     while (i < cleaned.size()) {
         char c1 = static_cast<char>(std::tolower(static_cast<unsigned char>(cleaned[i])));

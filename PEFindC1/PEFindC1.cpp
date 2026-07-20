@@ -32,27 +32,37 @@ struct CliArgs {
 
 void info_banner()
 {
-    cout << "Usage: PEFindC1.exe [options] <path> <search_string>" << endl << endl;
+    cout << "Usage:" << endl;
+    cout << "  PEFindC1.exe [options] <path> <search_string>" << endl;
+    cout << "  PEFindC1.exe [options] --hex <pattern> <path>" << endl;
+    cout << endl;
+    cout << "Options may appear in any order. In text mode, positional arguments must be" << endl;
+    cout << "<path> then <search_string>. In hex mode, supply --hex <pattern> and <path>." << endl;
+    cout << "Short flags use one dash (-a, -ci, -au); long flags use two (--ascii, --nocase)." << endl;
+    cout << "--hex has no short form (-h is help)." << endl;
+    cout << endl;
     cout << "Options:" << endl;
-    cout << "  -a or --ascii                           search for ASCII string" << endl;
-    cout << "  -u or --unicode                         search for Unicode string" << endl;
-    cout << "  -au or --both                           search for both ASCII and Unicode strings (default)" << endl;
-    cout << "  -ci or --nocase                         case-insensitive search" << endl;
-    cout << "  -c or --count                           show match counts per file instead of individual matches" << endl;
-    cout << "  -n <n> or --nth <n>                     show only the 1-based Nth match from each file" << endl;
+    cout << "  -a, --ascii                             search for ASCII string" << endl;
+    cout << "  -u, --unicode                           search for Unicode string" << endl;
+    cout << "  -au, -ua, --both                        search for both ASCII and Unicode (default)" << endl;
+    cout << "  -ci, --nocase                           case-insensitive text search (ASCII/Unicode only)" << endl;
+    cout << "  -c, --count                             show match counts per file instead of individual matches" << endl;
+    cout << "  -n, --nth <n>                           show only the 1-based Nth match from each file" << endl;
     cout << "  --hex <pattern>                         search for hex pattern (e.g. \"4D5A9000\" or \"xx xx 90 00\")" << endl;
-    cout << "  -s <n> or --sort <n>                    sort results by predicate:" << endl;
+    cout << "  -s, --sort <n>                          sort results by predicate:" << endl;
     cout << "      0 = filepath, 1 = fileOffset, 2 = sectionIndex," << endl;
     cout << "      3 = sectionOffset, 4 = sectionName, 5 = isPE" << endl;
-    cout << "  -h or --help                            show this help message" << endl;
+    cout << "  -h, --help                              show this help message" << endl;
     cout << endl;
     cout << "Examples:" << endl;
     cout << "  PEFindC1.exe -u E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFindC1.exe -u -s 1 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFindC1.exe -au -ci -s 2 E:\\tmp \"Setup\"" << endl;
     cout << "  PEFindC1.exe -a -ci E:\\tmp \"setup\"" << endl;
+    cout << "  PEFindC1.exe -n 1 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFindC1.exe -c E:\\tmp \"Setup\"" << endl;
     cout << "  PEFindC1.exe --hex \"4D5A9000\" E:\\tmp" << endl;
     cout << "  PEFindC1.exe --hex \"xx xx 90 00\" E:\\tmp" << endl;
-    cout << "  PEFindC1.exe -n 1 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -a -c E:\\tmp \"Setup\"" << endl;
     cout << "  PEFindC1.exe --hex \"4D5A9000\" -c E:\\tmp" << endl;
 }
 
@@ -351,6 +361,9 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
             }
             out.sortPredicate = static_cast<int>(sortPredicate);
         }
+        else if (!arg.empty() && arg[0] == '-') {
+            return false;
+        }
         else {
             positional.push_back(arg);
         }
@@ -401,6 +414,9 @@ int main(int argc, char** argv)
             cout << "Error: could not parse hex pattern \"" << args.hexString << "\"" << endl;
             return 1;
         }
+    } else if (args.searchString.empty()) {
+        cout << "Error: search string cannot be empty." << endl;
+        return 1;
     }
 
     // Check if target is a file or directory
