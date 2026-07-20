@@ -27,7 +27,7 @@ endif()
 
 # Add the Windows-only application when Windows headers are available.
 if(WIN32)
-    add_subdirectory(PEFindC1)
+    add_subdirectory(src)
 endif()
 
 if(PEFIND_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")

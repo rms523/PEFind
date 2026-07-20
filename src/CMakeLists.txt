@@ -11,10 +11,10 @@ add_library(pefind_core STATIC
 target_include_directories(pefind_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Main executable
-add_executable(PEFindC1 PEFindC1.cpp)
+add_executable(PEFind PEFind.cpp)
 
-target_include_directories(PEFindC1 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(PEFindC1 PRIVATE pefind_core)
+target_include_directories(PEFind PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(PEFind PRIVATE pefind_core)
 
 # Install targets (optional, for `make install`)
-install(TARGETS PEFindC1 DESTINATION bin)
+install(TARGETS PEFind DESTINATION bin)

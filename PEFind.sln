@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31919.166
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PEFindC1", "PEFindC1\PEFindC1.vcxproj", "{E679965F-746B-4101-9073-F98DAB1494C6}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PEFind", "src\PEFind.vcxproj", "{E679965F-746B-4101-9073-F98DAB1494C6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

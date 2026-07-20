@@ -36,15 +36,15 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path build -Recurse -Filter PEFindC1.exe |
+          $exe = Get-ChildItem -Path build -Recurse -Filter PEFind.exe |
             Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
             Select-Object -First 1
           if (-not $exe) {
-            throw "PEFindC1.exe not found under build/"
+            throw "PEFind.exe not found under build/"
           }
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item $exe.FullName dist/PEFindC1.exe
+          Copy-Item $exe.FullName dist/PEFind.exe
           Copy-Item README.md dist/README.md
           Compress-Archive -Path dist/* -DestinationPath PEFind-windows-x64.zip -Force
 

@@ -24,13 +24,13 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The workflow runs tests, then publishes `PEFind-windows-x64.zip` (containing `PEFindC1.exe` and `README.md`) to a GitHub Release with auto-generated notes. To rebuild an existing tag, run the **Release** workflow manually from the Actions tab and enter the tag name.
+The workflow runs tests, then publishes `PEFind-windows-x64.zip` (containing `PEFind.exe` and `README.md`) to a GitHub Release with auto-generated notes. To rebuild an existing tag, run the **Release** workflow manually from the Actions tab and enter the tag name.
 
 ## Usage
 
 ```
-PEFindC1.exe [options] <path> <search_string>
-PEFindC1.exe [options] --hex <pattern> <path>
+PEFind.exe [options] <path> <search_string>
+PEFind.exe [options] --hex <pattern> <path>
 ```
 
 Options may appear in any order. In text mode, positional arguments must be `<path>` then `<search_string>`. In hex mode, supply `--hex <pattern>` and `<path>`.
@@ -55,37 +55,37 @@ Short flags use one dash (`-a`, `-ci`, `-au`); long flags use two (`--ascii`, `-
 
 Search for Unicode string "Setup" in a folder:
 ```bash
-PEFindC1.exe -u E:\tmp "Setup"
+PEFind.exe -u E:\tmp "Setup"
 ```
 
 Sort results by file offset:
 ```bash
-PEFindC1.exe -u -s 1 E:\tmp "Setup"
+PEFind.exe -u -s 1 E:\tmp "Setup"
 ```
 
 Case-insensitive search for both ASCII and Unicode:
 ```bash
-PEFindC1.exe -au -ci -s 2 E:\tmp "Setup"
+PEFind.exe -au -ci -s 2 E:\tmp "Setup"
 ```
 
 Show only the first match from each file:
 ```bash
-PEFindC1.exe -n 1 E:\tmp "Setup"
+PEFind.exe -n 1 E:\tmp "Setup"
 ```
 
 Search by hex pattern (e.g. MZ header):
 ```bash
-PEFindC1.exe --hex "4D5A9000" E:\tmp
+PEFind.exe --hex "4D5A9000" E:\tmp
 ```
 
 Hex search with count mode (options may follow the path):
 ```bash
-PEFindC1.exe --hex "4D5A9000" -c E:\tmp
+PEFind.exe --hex "4D5A9000" -c E:\tmp
 ```
 
 Show match counts per file:
 ```bash
-PEFindC1.exe -c E:\tmp "Setup"
+PEFind.exe -c E:\tmp "Setup"
 ```
 
 ## Notes

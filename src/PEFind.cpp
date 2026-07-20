@@ -1,4 +1,4 @@
-// PEFindC1.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// PEFind.cpp : main entry point for the PEFind CLI.
 //
 #include <algorithm>
 #include <cerrno>
@@ -33,8 +33,8 @@ struct CliArgs {
 void info_banner()
 {
     cout << "Usage:" << endl;
-    cout << "  PEFindC1.exe [options] <path> <search_string>" << endl;
-    cout << "  PEFindC1.exe [options] --hex <pattern> <path>" << endl;
+    cout << "  PEFind.exe [options] <path> <search_string>" << endl;
+    cout << "  PEFind.exe [options] --hex <pattern> <path>" << endl;
     cout << endl;
     cout << "Options may appear in any order. In text mode, positional arguments must be" << endl;
     cout << "<path> then <search_string>. In hex mode, supply --hex <pattern> and <path>." << endl;
@@ -55,15 +55,15 @@ void info_banner()
     cout << "  -h, --help                              show this help message" << endl;
     cout << endl;
     cout << "Examples:" << endl;
-    cout << "  PEFindC1.exe -u E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -u -s 1 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -au -ci -s 2 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -a -ci E:\\tmp \"setup\"" << endl;
-    cout << "  PEFindC1.exe -n 1 E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe -c E:\\tmp \"Setup\"" << endl;
-    cout << "  PEFindC1.exe --hex \"4D5A9000\" E:\\tmp" << endl;
-    cout << "  PEFindC1.exe --hex \"xx xx 90 00\" E:\\tmp" << endl;
-    cout << "  PEFindC1.exe --hex \"4D5A9000\" -c E:\\tmp" << endl;
+    cout << "  PEFind.exe -u E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFind.exe -u -s 1 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFind.exe -au -ci -s 2 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFind.exe -a -ci E:\\tmp \"setup\"" << endl;
+    cout << "  PEFind.exe -n 1 E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFind.exe -c E:\\tmp \"Setup\"" << endl;
+    cout << "  PEFind.exe --hex \"4D5A9000\" E:\\tmp" << endl;
+    cout << "  PEFind.exe --hex \"xx xx 90 00\" E:\\tmp" << endl;
+    cout << "  PEFind.exe --hex \"4D5A9000\" -c E:\\tmp" << endl;
 }
 
 void banner()
@@ -82,7 +82,7 @@ _____  ______      ______ _____ _   _ _____   _____
          )" << endl;
 
     SetConsoleTextAttribute(hConsole, 15);
-    cout << "Welcome to the PE-FindC" << endl << endl;
+    cout << "Welcome to PEFind" << endl << endl;
 }
 
 static std::size_t result_path_width(const vector<file_info>& all_file_info)

@@ -22,7 +22,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{e679965f-746b-4101-9073-f98dab1494c6}</ProjectGuid>
-    <RootNamespace>PEFindC1</RootNamespace>
+    <RootNamespace>PEFind</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -144,7 +144,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="PEFindC1.cpp" />
+    <ClCompile Include="PEFind.cpp" />
     <ClCompile Include="pe_hdrs_helper.cpp" />
     <ClCompile Include="file_info.cpp" />
     <ClCompile Include="search_helper.cpp" />
