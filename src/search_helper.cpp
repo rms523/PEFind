@@ -7,9 +7,20 @@
 #include <limits>
 
 #include "algo.h"
+#include "elf_header_reader.h"
+#include "elf_hdrs_helper.h"
 #include "pe_header_reader.h"
 #include "pe_hdrs_helper.h"
 #include "platform.h"
+
+enum class BinaryFormat { Unknown, PE, ELF };
+
+struct SectionMatch {
+    bool found = false;
+    int index = 0;
+    uint64_t section_offset = 0;
+    std::string name;
+};
 
 static void status_update(const std::string& text)
 {
@@ -22,27 +33,82 @@ static void status_update(const std::string& text)
     last_len = msg.size();
 }
 
-static void add_match(const string& pathTosearch, uint64_t globalOffset, int sectionIndex,
-                      PIMAGE_SECTION_HEADER sectionHeader, const string& searchStr,
-                      BOOL isPE, vector<file_info>& all_file_info, const ResultCallback& onResult)
+static const char* format_label(BinaryFormat format)
+{
+    switch (format) {
+    case BinaryFormat::PE: return "PE";
+    case BinaryFormat::ELF: return "ELF";
+    default: return "Unknown";
+    }
+}
+
+static const char* outside_section_label(BinaryFormat format)
+{
+    switch (format) {
+    case BinaryFormat::PE:
+        return "Invalid PE or string not in sections(overlay?)";
+    case BinaryFormat::ELF:
+        return "Invalid ELF or string not in sections(overlay?)";
+    default:
+        return "Not a PE or ELF file.";
+    }
+}
+
+static SectionMatch lookup_section(BinaryFormat format, const BYTE* header_buf, size_t header_bytes,
+                                   uint64_t file_offset)
+{
+    SectionMatch match;
+    if (format == BinaryFormat::PE) {
+        int sectionIndex = 0;
+        PIMAGE_SECTION_HEADER sectionHeader =
+            get_section_hdr(header_buf, header_bytes, file_offset, sectionIndex);
+        if (sectionHeader != nullptr) {
+            match.found = true;
+            match.index = sectionIndex;
+            match.section_offset = file_offset - sectionHeader->PointerToRawData;
+            match.name.assign(reinterpret_cast<const char*>(sectionHeader->Name), 8);
+            // Trim trailing NULs from the 8-byte PE section name.
+            while (!match.name.empty() && match.name.back() == '\0') {
+                match.name.pop_back();
+            }
+        }
+        return match;
+    }
+
+    if (format == BinaryFormat::ELF) {
+        const ElfSectionHit hit =
+            get_elf_section_by_file_offset(header_buf, header_bytes, file_offset);
+        if (hit.found) {
+            match.found = true;
+            match.index = hit.index;
+            match.section_offset = hit.section_offset;
+            match.name = hit.name;
+        }
+    }
+    return match;
+}
+
+static void add_match(const string& pathTosearch, uint64_t globalOffset, const SectionMatch& section,
+                      const string& searchStr, BinaryFormat format,
+                      vector<file_info>& all_file_info, const ResultCallback& onResult)
 {
     file_info fi;
     fi.filepath = pathTosearch;
     fi.fileoffset = globalOffset;
-    fi.sectionindex = sectionIndex;
+    fi.stringTosearch = searchStr;
 
-    if (sectionHeader != NULL) {
-        fi.sectionoffset = globalOffset - sectionHeader->PointerToRawData;
-        fi.sectionName = string(reinterpret_cast<char*>(sectionHeader->Name), 8);
-        fi.isPE = "PE";
+    if (section.found) {
+        fi.sectionindex = section.index;
+        fi.sectionoffset = section.section_offset;
+        fi.sectionName = section.name;
+        fi.isPE = format_label(format);
     } else {
+        fi.sectionindex = 0;
         fi.sectionoffset = 0;
         fi.sectionName = "";
-        if (isPE) fi.isPE = "Invalid PE or string not in sections(overlay?)";
-        else fi.isPE = "Not a PE file.";
+        fi.isPE = outside_section_label(format);
     }
 
-    fi.stringTosearch = searchStr;
     all_file_info.push_back(fi);
     if (onResult) {
         onResult(all_file_info.back());
@@ -130,15 +196,53 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
     }
 
     std::vector<BYTE> header_buf;
-    const uint32_t header_bytes = read_pe_header(file, header_buf);
-    if (header_bytes == 0) {
-        std::cout << "File header read failed!" << std::endl;
-        if (stats) stats->recordFailure(pathTosearch);
-        platform_file_close(file);
-        return;
+    BinaryFormat format = BinaryFormat::Unknown;
+
+    // Probe the first bytes to choose PE vs ELF header loading.
+    {
+        std::vector<BYTE> probe;
+        const size_t probe_len =
+            static_cast<size_t>((std::min)(platform_file_size(file), static_cast<uint64_t>(64)));
+        if (probe_len == 0 || !platform_file_seek(file, 0)) {
+            std::cout << "File header read failed!" << std::endl;
+            if (stats) stats->recordFailure(pathTosearch);
+            platform_file_close(file);
+            return;
+        }
+        size_t probe_read = 0;
+        probe.resize(probe_len);
+        if (!platform_file_read(file, probe.data(), probe_len, probe_read) || probe_read == 0) {
+            std::cout << "File header read failed!" << std::endl;
+            if (stats) stats->recordFailure(pathTosearch);
+            platform_file_close(file);
+            return;
+        }
+        probe.resize(probe_read);
+
+        if (checkPE(probe.data(), probe.size())) {
+            format = BinaryFormat::PE;
+            const uint32_t header_bytes = read_pe_header(file, header_buf);
+            if (header_bytes == 0) {
+                std::cout << "File header read failed!" << std::endl;
+                if (stats) stats->recordFailure(pathTosearch);
+                platform_file_close(file);
+                return;
+            }
+        } else if (checkELF(probe.data(), probe.size())) {
+            format = BinaryFormat::ELF;
+            const uint32_t header_bytes = read_elf_header(file, header_buf);
+            if (header_bytes == 0) {
+                std::cout << "File header read failed!" << std::endl;
+                if (stats) stats->recordFailure(pathTosearch);
+                platform_file_close(file);
+                return;
+            }
+        } else {
+            // Non-PE/ELF: keep the probe so section lookup simply reports unknown.
+            header_buf.swap(probe);
+        }
     }
 
-    const int isPE = checkPE(header_buf.data(), header_bytes) ? 1 : 0;
     const bool useHexPattern = (hexPat != nullptr && !hexPat->bytes.empty());
 
     const BYTE* pattern = nullptr;
@@ -229,26 +333,24 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     if (countMode && !allOffsets.empty()) {
         const uint64_t firstOffset = allOffsets[0];
-        int sectionIndex = 0;
-        PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes,
-                                                             firstOffset, sectionIndex);
+        const SectionMatch section =
+            lookup_section(format, header_buf.data(), header_buf.size(), firstOffset);
 
         file_info fi;
         fi.filepath = pathTosearch;
         fi.fileoffset = firstOffset;
         fi.stringTosearch = std::to_string(allOffsets.size());
 
-        if (sectionHeader != NULL) {
-            fi.sectionindex = sectionIndex;
-            fi.sectionoffset = firstOffset - sectionHeader->PointerToRawData;
-            fi.sectionName = string(reinterpret_cast<char*>(sectionHeader->Name), 8);
-            fi.isPE = "PE";
+        if (section.found) {
+            fi.sectionindex = section.index;
+            fi.sectionoffset = section.section_offset;
+            fi.sectionName = section.name;
+            fi.isPE = format_label(format);
         } else {
             fi.sectionindex = 0;
             fi.sectionoffset = 0;
             fi.sectionName = "";
-            if (isPE) fi.isPE = "Invalid PE or string not in sections(overlay?)";
-            else fi.isPE = "Not a PE file.";
+            fi.isPE = outside_section_label(format);
         }
 
         all_file_info.push_back(fi);
@@ -257,12 +359,10 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
         }
     } else {
         for (uint64_t globalOffset : allOffsets) {
-            int sectionIndex = 0;
-            PIMAGE_SECTION_HEADER sectionHeader = get_section_hdr(header_buf.data(), header_bytes,
-                                                                 globalOffset, sectionIndex);
-
-            add_match(pathTosearch, globalOffset, sectionIndex, sectionHeader,
-                      stringTosearch, isPE, all_file_info, onResult);
+            const SectionMatch section =
+                lookup_section(format, header_buf.data(), header_buf.size(), globalOffset);
+            add_match(pathTosearch, globalOffset, section, stringTosearch, format,
+                      all_file_info, onResult);
         }
     }
 }

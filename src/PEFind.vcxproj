@@ -146,16 +146,24 @@
   <ItemGroup>
     <ClCompile Include="PEFind.cpp" />
     <ClCompile Include="pe_header_reader.cpp" />
+    <ClCompile Include="elf_header_reader.cpp" />
     <ClCompile Include="platform_win.cpp" />
     <ClCompile Include="pe_hdrs_helper.cpp" />
+    <ClCompile Include="elf_hdrs_helper.cpp" />
     <ClCompile Include="file_info.cpp" />
     <ClCompile Include="search_helper.cpp" />
     <ClCompile Include="util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="algo.h" />
+    <ClInclude Include="elf_defs.h" />
+    <ClInclude Include="elf_header_reader.h" />
+    <ClInclude Include="elf_hdrs_helper.h" />
     <ClInclude Include="file_info.h" />
     <ClInclude Include="pe_hdrs_helper.h" />
+    <ClInclude Include="pe_header_reader.h" />
+    <ClInclude Include="pe_winnt.h" />
+    <ClInclude Include="platform.h" />
     <ClInclude Include="search_helper.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>

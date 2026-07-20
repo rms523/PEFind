@@ -1,6 +1,6 @@
 # PEFind
 
-A command-line tool for static analysis that searches for ASCII, Unicode, and hex patterns in files (especially PE binaries). It scans multiple files recursively and lets you sort results by file path, offset, section index, and more.
+A command-line tool for static analysis that searches for ASCII, Unicode, and hex patterns in files (especially PE and ELF binaries). It scans multiple files recursively and lets you sort results by file path, offset, section index, and more.
 
 ## Building
 
@@ -98,11 +98,12 @@ PEFind.exe -c E:\tmp "Setup"
 
 ## Notes
 
-- ASCII, Unicode, and hex matches use the same result columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE`.
+- ASCII, Unicode, and hex matches use the same result columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `isPE` (format/status column).
 - Unsorted per-match searches print rows as files finish scanning. `--sort`, `--count`, and `--nth` render after the scan so their results can be sorted or consolidated first.
 - Every scan ends with statistics for scanned files, files with matches, matches found, displayed result rows, and files with scan errors.
 - `--count` keeps those result columns and appends `Matches`. Each count row covers one file, so its location and section columns describe the earliest counted match in that file.
-- Invalid PE files and matches outside PE sections are reported in the `isPE` column as `Invalid PE or string not in sections(overlay?)`. Non-PE files use `Not a PE file.`
+- The `isPE` column reports binary format status: `PE` / `ELF` for in-section matches; `Invalid PE or string not in sections(overlay?)` / `Invalid ELF or string not in sections(overlay?)` for recognized binaries with matches outside sections; and `Not a PE or ELF file.` otherwise.
+- ELF support covers little-endian ELF32 and ELF64 section mapping (`.text`, `.data`, etc.). Big-endian ELF is not mapped yet.
 - Hex patterns must be complete byte pairs and must contain at least one exact byte; all-wildcard patterns are rejected.
 - `--nocase` applies to ASCII and Unicode text search only; hex search is always exact.
 - `--count` and `--nth` are separate output modes and cannot be combined.

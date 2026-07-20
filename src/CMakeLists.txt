@@ -5,6 +5,8 @@ add_library(pefind_core STATIC
     file_info.cpp
     pe_hdrs_helper.cpp
     pe_header_reader.cpp
+    elf_hdrs_helper.cpp
+    elf_header_reader.cpp
     search_helper.cpp
     util.cpp
 )

@@ -9,6 +9,9 @@ add_executable(test_algorithms
     test_wildcard_search.cpp
     test_case_insensitive.cpp
     test_pe_parsing.cpp
+    test_elf_parsing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/elf_hdrs_helper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/util.cpp
 )
 
 target_include_directories(test_algorithms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../src)

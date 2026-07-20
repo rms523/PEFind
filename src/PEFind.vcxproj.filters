@@ -21,10 +21,16 @@
     <ClCompile Include="pe_header_reader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="elf_header_reader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="platform_win.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pe_hdrs_helper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="elf_hdrs_helper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="util.cpp">
@@ -41,7 +47,25 @@
     <ClInclude Include="algo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="elf_defs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="elf_header_reader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="elf_hdrs_helper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="pe_hdrs_helper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pe_header_reader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pe_winnt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="platform.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="util.h">
