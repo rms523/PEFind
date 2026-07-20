@@ -8,12 +8,12 @@ uint32_t read_pe_header(PlatformFile* file, std::vector<BYTE>& out_buf)
 {
     if (file == nullptr) return 0;
 
-    const uint64_t file_size = platform_file_size(file);
+    const ULONGLONG file_size = static_cast<ULONGLONG>(platform_file_size(file));
     if (file_size == 0) return 0;
 
     const DWORD MIN_HEADER = 1024;
     const DWORD MAX_PE_HEADER = 64 * 1024;
-    DWORD read_size = static_cast<DWORD>((std::min)(file_size, static_cast<uint64_t>(MIN_HEADER)));
+    DWORD read_size = static_cast<DWORD>((std::min)(file_size, static_cast<ULONGLONG>(MIN_HEADER)));
     if (read_size == 0) return 0;
 
     out_buf.resize(read_size);

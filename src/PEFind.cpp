@@ -15,6 +15,8 @@
 
 using std::cout;
 using std::endl;
+using std::string;
+using std::vector;
 
 enum SearchMode { SM_ASCII = 1, SM_UNICODE = 2 };
 

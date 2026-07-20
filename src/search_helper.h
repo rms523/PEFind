@@ -2,12 +2,14 @@
 
 #include <cstddef>
 #include <functional>
+#include <string>
 #include <unordered_set>
 
 #include "algo.h"
 #include "file_info.h"
 #include "pe_winnt.h"
 
+using std::string;
 using std::vector;
 
 using ResultCallback = std::function<void(const file_info&)>;

@@ -13,7 +13,7 @@ bool compare_secName(const file_info& x, const file_info& y) { return x.sectionN
 
 bool compare_isPE(const file_info& x, const file_info& y) { return x.isPE < y.isPE; }
 
-int checkFile(const std::string pathTosearch)
+int checkFile(const std::string& pathTosearch)
 {
     return platform_path_kind(pathTosearch);
 }
