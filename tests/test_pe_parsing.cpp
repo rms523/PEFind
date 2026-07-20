@@ -273,7 +273,8 @@ TEST(PeBufferCreation, SectionNames) {
     ASSERT_NE(sec0, nullptr);
     ASSERT_NE(sec1, nullptr);
     // First section should be ".text"
-    EXPECT_EQ(strncmp(sec0->Name, ".text", 5), 0);
+    // Windows SDK defines Name as BYTE[8]; cast for MSVC /permissive-.
+    EXPECT_EQ(strncmp(reinterpret_cast<const char*>(sec0->Name), ".text", 5), 0);
 }
 
 TEST(PeBufferCreation, LargeFile) {
