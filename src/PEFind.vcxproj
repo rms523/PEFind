@@ -147,6 +147,7 @@
     <ClCompile Include="PEFind.cpp" />
     <ClCompile Include="pe_header_reader.cpp" />
     <ClCompile Include="platform_win.cpp" />
+    <ClCompile Include="pe_hdrs_helper.cpp" />
     <ClCompile Include="file_info.cpp" />
     <ClCompile Include="search_helper.cpp" />
     <ClCompile Include="util.cpp" />

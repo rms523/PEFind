@@ -8,16 +8,10 @@
 #include <unistd.h>
 #endif
 
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
-#endif
-
 #include "algo.h"
 #include "file_info.h"
 #include "pe_hdrs_helper.h"
+#include "platform.h"
 #include "search_helper.h"
 
 namespace {
@@ -28,14 +22,13 @@ public:
     {
 #if defined(_WIN32)
         wchar_t tempDir[MAX_PATH]{};
-        wchar_t tempFile[MAX_PATH]{};
         if (GetTempPathW(MAX_PATH, tempDir) == 0 ||
-            GetTempFileNameW(tempDir, L"pef", 0, tempFile) == 0) {
+            GetTempFileNameW(tempDir, L"pef", 0, path_) == 0) {
             ADD_FAILURE() << "Failed to get temp file path.";
             return;
         }
 
-        HANDLE handle = CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+        HANDLE handle = CreateFileW(path_, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                     FILE_ATTRIBUTE_TEMPORARY, nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
             ADD_FAILURE() << "Failed to create temp file.";
@@ -47,14 +40,6 @@ public:
         CloseHandle(handle);
         EXPECT_TRUE(ok);
         EXPECT_EQ(written, static_cast<DWORD>(bytes.size()));
-
-        const int length = WideCharToMultiByte(CP_UTF8, 0, tempFile, -1, nullptr, 0, nullptr, nullptr);
-        if (length <= 0) {
-            ADD_FAILURE() << "Failed to convert temp file path.";
-            return;
-        }
-        path_.assign(static_cast<size_t>(length - 1), '\0');
-        WideCharToMultiByte(CP_UTF8, 0, tempFile, -1, path_.data(), length, nullptr, nullptr);
 #else
         char tmpl[] = "/tmp/pefindXXXXXX";
         const int fd = mkstemp(tmpl);
@@ -78,7 +63,7 @@ public:
             return;
         }
 #if defined(_WIN32)
-        DeleteFileA(path_.c_str());
+        DeleteFileW(path_);
 #else
         ::remove(path_.c_str());
 #endif
@@ -86,11 +71,19 @@ public:
 
     std::string utf8Path() const
     {
+#if defined(_WIN32)
+        return platform_utf16le_to_utf8(reinterpret_cast<const char16_t*>(path_), wcslen(path_));
+#else
         return path_;
+#endif
     }
 
 private:
+#if defined(_WIN32)
+    wchar_t path_[MAX_PATH]{};
+#else
     std::string path_;
+#endif
 };
 
 std::vector<uint64_t> offsets(const std::vector<file_info>& matches)

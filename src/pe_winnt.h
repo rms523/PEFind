@@ -1,6 +1,15 @@
 #pragma once
-// Portable Windows PE type definitions used on all platforms.
+// PE type definitions: Windows SDK on native builds, portable structs elsewhere.
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <cstddef>
 #include <cstdint>
 
@@ -178,3 +187,4 @@ struct IMAGE_SECTION_HEADER {
 #pragma pack(pop)
 
 typedef IMAGE_SECTION_HEADER* PIMAGE_SECTION_HEADER;
+#endif
