@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <cassert>

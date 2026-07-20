@@ -40,7 +40,15 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DPEFIND_BUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build build --config Release --verbose
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --verbose 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '::group::Build log (last 150 lines)'
+            Get-Content build.log -Tail 150 | ForEach-Object { Write-Host $_ }
+            Write-Host '::endgroup::'
+            exit 1
+          }
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure

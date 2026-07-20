@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+
 #include "pe_winnt.h"
 
 BYTE* get_nt_hrds(const BYTE* pe_buffer, size_t buffer_size);

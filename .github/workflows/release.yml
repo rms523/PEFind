@@ -45,7 +45,14 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cmake --build build --config Release --verbose
+            cmake --build build --config Release --verbose 2>&1 | tee build.log
+            status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then
+              echo '::group::Build log (last 150 lines)'
+              tail -n 150 build.log
+              echo '::endgroup::'
+              exit "$status"
+            fi
           else
             cmake --build build
           fi
