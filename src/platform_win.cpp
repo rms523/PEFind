@@ -13,6 +13,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <vector>
 
 struct PlatformFile {
     HANDLE handle = INVALID_HANDLE_VALUE;
@@ -167,12 +168,30 @@ void platform_console_set_color(int color)
 std::u16string platform_utf8_to_utf16le(const std::string& text)
 {
     const std::wstring wide = utf8_to_wide(text);
-    return std::u16string(wide.begin(), wide.end());
+    std::u16string out(wide.size(), u'\0');
+    for (size_t i = 0; i < wide.size(); ++i) {
+        out[i] = static_cast<char16_t>(wide[i]);
+    }
+    return out;
+}
+
+std::string platform_wide_to_utf8(const wchar_t* data, size_t count)
+{
+    if (data == nullptr || count == 0) {
+        return {};
+    }
+    return wide_to_utf8(std::wstring(data, count));
 }
 
 std::string platform_utf16le_to_utf8(const char16_t* data, size_t count)
 {
-    std::wstring wide(reinterpret_cast<const wchar_t*>(data), count);
+    if (data == nullptr || count == 0) {
+        return {};
+    }
+    std::wstring wide(count, L'\0');
+    for (size_t i = 0; i < count; ++i) {
+        wide[i] = static_cast<wchar_t>(data[i]);
+    }
     return wide_to_utf8(wide);
 }
 
@@ -181,7 +200,14 @@ void platform_lowercase_utf16(char16_t* data, size_t count)
     if (data == nullptr || count == 0) {
         return;
     }
-    CharLowerBuffW(reinterpret_cast<PWSTR>(data), static_cast<DWORD>(count));
+    std::vector<wchar_t> wide(count);
+    for (size_t i = 0; i < count; ++i) {
+        wide[i] = static_cast<wchar_t>(data[i]);
+    }
+    CharLowerBuffW(wide.data(), static_cast<DWORD>(count));
+    for (size_t i = 0; i < count; ++i) {
+        data[i] = static_cast<char16_t>(wide[i]);
+    }
 }
 
 void platform_walk_directory(

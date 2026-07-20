@@ -20,6 +20,8 @@ void platform_console_flush_input();
 void platform_console_set_color(int color); // 0 = default, 1 = green
 const char* platform_exe_name();
 
+std::string platform_wide_to_utf8(const wchar_t* data, size_t count);
+
 void platform_lowercase_utf16(char16_t* data, size_t count);
 
 std::u16string platform_utf8_to_utf16le(const std::string& text);

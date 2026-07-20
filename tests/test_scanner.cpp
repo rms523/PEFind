@@ -78,7 +78,7 @@ public:
         if (!valid_) {
             return {};
         }
-        return platform_utf16le_to_utf8(reinterpret_cast<const char16_t*>(path_), wcslen(path_));
+        return platform_wide_to_utf8(path_, wcslen(path_));
 #else
         return path_;
 #endif

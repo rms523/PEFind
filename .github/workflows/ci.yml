@@ -40,7 +40,7 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DPEFIND_BUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --verbose
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure

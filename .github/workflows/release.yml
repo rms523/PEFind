@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            cmake --build build --config Release
+            cmake --build build --config Release --verbose
           else
             cmake --build build
           fi
