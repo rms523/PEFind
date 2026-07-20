@@ -9,7 +9,6 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
-#include <ConsoleApi.h>
 
 #include <cstring>
 #include <functional>
@@ -153,10 +152,7 @@ void platform_file_close(PlatformFile* file)
 
 void platform_console_flush_input()
 {
-    HANDLE console = GetStdHandle(STD_INPUT_HANDLE);
-    if (console != INVALID_HANDLE_VALUE) {
-        FlushConsoleInputBuffer(console);
-    }
+    // No-op: FlushConsoleInputBuffer is optional and not always exposed with WIN32_LEAN_AND_MEAN.
 }
 
 void platform_console_set_color(int color)

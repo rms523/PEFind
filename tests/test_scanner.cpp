@@ -32,6 +32,7 @@ public:
                                     FILE_ATTRIBUTE_TEMPORARY, nullptr);
         if (handle == INVALID_HANDLE_VALUE) {
             ADD_FAILURE() << "Failed to create temp file.";
+            path_[0] = L'\0';
             return;
         }
 
@@ -40,6 +41,7 @@ public:
         CloseHandle(handle);
         EXPECT_TRUE(ok);
         EXPECT_EQ(written, static_cast<DWORD>(bytes.size()));
+        valid_ = ok && written == static_cast<DWORD>(bytes.size());
 #else
         char tmpl[] = "/tmp/pefindXXXXXX";
         const int fd = mkstemp(tmpl);
@@ -59,19 +61,23 @@ public:
 
     ~TempFile()
     {
-        if (path_.empty()) {
-            return;
-        }
 #if defined(_WIN32)
-        DeleteFileW(path_);
+        if (valid_) {
+            DeleteFileW(path_);
+        }
 #else
-        ::remove(path_.c_str());
+        if (!path_.empty()) {
+            ::remove(path_.c_str());
+        }
 #endif
     }
 
     std::string utf8Path() const
     {
 #if defined(_WIN32)
+        if (!valid_) {
+            return {};
+        }
         return platform_utf16le_to_utf8(reinterpret_cast<const char16_t*>(path_), wcslen(path_));
 #else
         return path_;
@@ -81,6 +87,7 @@ public:
 private:
 #if defined(_WIN32)
     wchar_t path_[MAX_PATH]{};
+    bool valid_ = false;
 #else
     std::string path_;
 #endif
