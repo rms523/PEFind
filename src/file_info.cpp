@@ -1,7 +1,5 @@
-#include <Windows.h>
 #include "file_info.h"
-#include "util.h"
-
+#include "platform.h"
 
 bool compare_filepath(const file_info& x, const file_info& y) { return x.filepath < y.filepath; }
 
@@ -15,25 +13,7 @@ bool compare_secName(const file_info& x, const file_info& y) { return x.sectionN
 
 bool compare_isPE(const file_info& x, const file_info& y) { return x.isPE < y.isPE; }
 
-
-int checkFile(const string pathTosearch)
+int checkFile(const std::string pathTosearch)
 {
-    std::wstring widePath = utf8_to_utf16(pathTosearch);
-    if (widePath.empty() && !pathTosearch.empty()) {
-        return -1;
-    }
-
-    DWORD fileInfo = GetFileAttributesW(widePath.c_str());
-
-    if (INVALID_FILE_ATTRIBUTES == fileInfo)
-    {
-        return -1;
-    }
-
-    if (fileInfo & FILE_ATTRIBUTE_DIRECTORY) {
-        //cout << "pathTosearch is directory." << endl;
-        return 1;
-    }
-
-    return 0;
+    return platform_path_kind(pathTosearch);
 }

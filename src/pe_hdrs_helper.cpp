@@ -25,7 +25,7 @@ IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer, size_t buffer_size)
 {
     BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
     if (ptr == NULL) return NULL;
-    if (!validate_ptr(pe_buffer, static_cast<SIZE_T>(buffer_size), ptr, sizeof(IMAGE_NT_HEADERS32))) {
+    if (!validate_ptr(pe_buffer, buffer_size, ptr, sizeof(IMAGE_NT_HEADERS32))) {
         return NULL;
     }
 
@@ -42,7 +42,7 @@ IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer, size_t buffer_size)
 {
     const BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
     if (ptr == NULL) return NULL;
-    if (!validate_ptr(pe_buffer, static_cast<SIZE_T>(buffer_size), ptr, sizeof(IMAGE_NT_HEADERS64))) {
+    if (!validate_ptr(pe_buffer, buffer_size, ptr, sizeof(IMAGE_NT_HEADERS64))) {
         return NULL;
     }
 
@@ -104,14 +104,14 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
     }
 
     // Validate we have enough data for the signature and file header.
-    if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), nt_hdr, sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER))) {
+    if (!validate_ptr(payload, buffer_size, nt_hdr, sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER))) {
         return NULL;
     }
 
     const IMAGE_FILE_HEADER* fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(nt_hdr + sizeof(DWORD));
     const BYTE* optionalHeader = reinterpret_cast<const BYTE*>(fileHdr) + sizeof(IMAGE_FILE_HEADER);
     if (fileHdr->SizeOfOptionalHeader < sizeof(WORD) ||
-        !validate_ptr(payload, static_cast<SIZE_T>(buffer_size), optionalHeader, fileHdr->SizeOfOptionalHeader)) {
+        !validate_ptr(payload, buffer_size, optionalHeader, fileHdr->SizeOfOptionalHeader)) {
         return NULL;
     }
 
@@ -147,7 +147,7 @@ PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_s
         const auto* section = reinterpret_cast<const IMAGE_SECTION_HEADER*>(secPtr + (numberOfSections * secSize));
 
         // Validate the struct pointer is within bounds before accessing fields
-        if (!validate_ptr(payload, static_cast<SIZE_T>(buffer_size), section, sizeof(IMAGE_SECTION_HEADER))) {
+        if (!validate_ptr(payload, buffer_size, section, sizeof(IMAGE_SECTION_HEADER))) {
             return NULL;
         }
 

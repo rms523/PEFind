@@ -9,8 +9,12 @@ on:
       - main
 
 jobs:
-  test-algorithms:
-    runs-on: ubuntu-latest
+  test-unix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout

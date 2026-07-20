@@ -16,7 +16,20 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: PEFind-windows-x64.zip
+            exe_name: PEFind.exe
+          - os: ubuntu-latest
+            artifact_name: PEFind-linux-x64.tar.gz
+            exe_name: PEFind
+          - os: macos-latest
+            artifact_name: PEFind-macos-universal.tar.gz
+            exe_name: PEFind
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -28,29 +41,57 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DPEFIND_BUILD_TESTS=ON
 
       - name: Build
-        run: cmake --build build --config Release
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmake --build build --config Release
+          else
+            cmake --build build
+          fi
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ctest --test-dir build -C Release --output-on-failure
+          else
+            ctest --test-dir build --output-on-failure
+          fi
 
-      - name: Package
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path build -Recurse -Filter PEFind.exe |
+          $exe = Get-ChildItem -Path build -Recurse -Filter ${{ matrix.exe_name }} |
             Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
             Select-Object -First 1
           if (-not $exe) {
-            throw "PEFind.exe not found under build/"
+            throw "${{ matrix.exe_name }} not found under build/"
           }
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item $exe.FullName dist/PEFind.exe
+          Copy-Item $exe.FullName dist/${{ matrix.exe_name }}
           Copy-Item README.md dist/README.md
-          Compress-Archive -Path dist/* -DestinationPath PEFind-windows-x64.zip -Force
+          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }} -Force
 
-      - name: Create GitHub Release
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          exe="$(find build -type f -name '${{ matrix.exe_name }}' ! -path '*/CMakeFiles/*' | head -n 1)"
+          if [ -z "$exe" ]; then
+            echo "${{ matrix.exe_name }} not found under build/"
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp "$exe" "dist/${{ matrix.exe_name }}"
+          cp README.md dist/README.md
+          tar -czf "${{ matrix.artifact_name }}" -C dist .
+
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: PEFind-windows-x64.zip
-          generate_release_notes: true
+          files: ${{ matrix.artifact_name }}
+          generate_release_notes: ${{ matrix.os == 'ubuntu-latest' }}

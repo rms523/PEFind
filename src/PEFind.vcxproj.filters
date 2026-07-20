@@ -18,6 +18,12 @@
     <ClCompile Include="PEFind.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="pe_header_reader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="platform_win.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="pe_hdrs_helper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

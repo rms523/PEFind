@@ -9,6 +9,8 @@
 #include <limits>
 #include <cassert>
 
+#include "pe_winnt.h"
+
 #ifndef IMAGE_NT_OPTIONAL_HDR_MAGIC32
 #define IMAGE_NT_OPTIONAL_HDR_MAGIC32 IMAGE_NT_OPTIONAL_HDR32_MAGIC
 #endif

@@ -25,10 +25,7 @@ if(PEFIND_BUILD_TESTS)
     FetchContent_MakeAvailable(googletest)
 endif()
 
-# Add the Windows-only application when Windows headers are available.
-if(WIN32)
-    add_subdirectory(src)
-endif()
+add_subdirectory(src)
 
 if(PEFIND_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     enable_testing()

@@ -4,34 +4,42 @@ A command-line tool for static analysis that searches for ASCII, Unicode, and he
 
 ## Building
 
-Requires CMake 3.16+ and a C++17 compiler. The scanner itself uses Windows
-APIs and is built on Windows; the unit tests are portable and can run on other
-platforms.
+Requires CMake 3.16+ and a C++17 compiler. PEFind builds on Windows, Linux, and macOS.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
+cmake --build build
 ```
 
-Unit tests are included and run with `ctest` from the build directory.
+On Windows with Visual Studio generators, use `cmake --build build --config Release`.
+
+Unit tests are included and run with `ctest --test-dir build`.
 
 ## Releases
 
-GitHub Actions builds a Windows release automatically when you push a version tag:
+GitHub Actions builds release packages for Windows, Linux, and macOS when you push a version tag:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The workflow runs tests, then publishes `PEFind-windows-x64.zip` (containing `PEFind.exe` and `README.md`) to a GitHub Release with auto-generated notes. To rebuild an existing tag, run the **Release** workflow manually from the Actions tab and enter the tag name.
+The workflow runs tests on each platform, then publishes:
+
+- `PEFind-windows-x64.zip` (`PEFind.exe` + `README.md`)
+- `PEFind-linux-x64.tar.gz` (`PEFind` + `README.md`)
+- `PEFind-macos-universal.tar.gz` (`PEFind` + `README.md`)
+
+To rebuild an existing tag, run the **Release** workflow manually from the Actions tab and enter the tag name.
 
 ## Usage
 
 ```
-PEFind.exe [options] <path> <search_string>
-PEFind.exe [options] --hex <pattern> <path>
+PEFind[.exe] [options] <path> <search_string>
+PEFind[.exe] [options] --hex <pattern> <path>
 ```
+
+On Windows the binary is `PEFind.exe`; on Linux and macOS it is `PEFind`.
 
 Options may appear in any order. In text mode, positional arguments must be `<path>` then `<search_string>`. In hex mode, supply `--hex <pattern>` and `<path>`.
 

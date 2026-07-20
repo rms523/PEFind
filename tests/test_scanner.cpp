@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
-#include <Windows.h>
+
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <vector>
 
 #include "algo.h"
 #include "file_info.h"
 #include "pe_hdrs_helper.h"
 #include "search_helper.h"
-#include "util.h"
 
 namespace {
 
@@ -14,47 +16,39 @@ class TempFile {
 public:
     explicit TempFile(const std::vector<BYTE>& bytes)
     {
-        wchar_t tempDir[MAX_PATH]{};
-        if (GetTempPathW(MAX_PATH, tempDir) == 0) {
-            ADD_FAILURE() << "Failed to get a temp directory.";
-            return;
-        }
-        if (GetTempFileNameW(tempDir, L"pef", 0, path_) == 0) {
-            ADD_FAILURE() << "Failed to get a temp file path.";
-            return;
-        }
+        namespace fs = std::filesystem;
+        path_ = fs::temp_directory_path() / "pefind_test_XXXXXX.bin";
+        path_ = fs::unique_path(path_);
 
-        HANDLE handle = CreateFileW(path_, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                                    FILE_ATTRIBUTE_TEMPORARY, nullptr);
-        if (handle == INVALID_HANDLE_VALUE) {
-            ADD_FAILURE() << "Failed to create the temp file.";
+        std::ofstream out(path_, std::ios::binary);
+        if (!out) {
+            ADD_FAILURE() << "Failed to create temp file.";
             return;
         }
-
-        DWORD written = 0;
-        BOOL ok = WriteFile(handle, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
-        CloseHandle(handle);
-        EXPECT_TRUE(ok);
-        EXPECT_EQ(written, static_cast<DWORD>(bytes.size()));
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!out) {
+            ADD_FAILURE() << "Failed to write temp file.";
+        }
     }
 
     ~TempFile()
     {
-        DeleteFileW(path_);
+        std::error_code ec;
+        std::filesystem::remove(path_, ec);
     }
 
     std::string utf8Path() const
     {
-        return utf16_to_utf8(path_);
+        return path_.string();
     }
 
 private:
-    wchar_t path_[MAX_PATH]{};
+    std::filesystem::path path_;
 };
 
-std::vector<DWORD64> offsets(const std::vector<file_info>& matches)
+std::vector<uint64_t> offsets(const std::vector<file_info>& matches)
 {
-    std::vector<DWORD64> result;
+    std::vector<uint64_t> result;
     for (const auto& match : matches) {
         result.push_back(match.fileoffset);
     }
@@ -103,7 +97,7 @@ TEST(ScannerProduction, ResultCallbackReceivesMatchesAsFileCompletes)
     ASSERT_FALSE(file.utf8Path().empty());
 
     std::vector<file_info> matches;
-    std::vector<DWORD64> emittedOffsets;
+    std::vector<uint64_t> emittedOffsets;
     ScanStats stats;
     searchStringinFile(file.utf8Path(), "AB", FALSE, matches, FALSE, FALSE, nullptr,
                        [&emittedOffsets](const file_info& match) {
@@ -111,7 +105,7 @@ TEST(ScannerProduction, ResultCallbackReceivesMatchesAsFileCompletes)
                        }, &stats);
 
     EXPECT_EQ(emittedOffsets, offsets(matches));
-    EXPECT_EQ(emittedOffsets, (std::vector<DWORD64>{1, 3}));
+    EXPECT_EQ(emittedOffsets, (std::vector<uint64_t>{1, 3}));
     EXPECT_EQ(stats.filesScanned(), 1u);
     EXPECT_EQ(stats.filesWithMatches(), 1u);
     EXPECT_EQ(stats.matchesFound, 2u);

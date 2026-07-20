@@ -3,9 +3,10 @@
 #include <cstddef>
 #include <functional>
 #include <unordered_set>
-#include <windows.h>
-#include "file_info.h"
+
 #include "algo.h"
+#include "file_info.h"
+#include "pe_winnt.h"
 
 using std::vector;
 
