@@ -1,0 +1,55 @@
+#pragma once
+
+#include <cstddef>
+#include <functional>
+#include <string>
+#include <unordered_set>
+
+#include "algo.h"
+#include "file_info.h"
+#include "pe_winnt.h"
+
+using std::string;
+using std::vector;
+
+using ResultCallback = std::function<void(const file_info&)>;
+
+struct ScanStats {
+    std::unordered_set<string> scannedFiles;
+    std::unordered_set<string> matchedFiles;
+    std::unordered_set<string> failedFiles;
+    std::size_t matchesFound = 0;
+
+    void recordFile(const string& path, std::size_t matchCount)
+    {
+        scannedFiles.insert(path);
+        matchesFound += matchCount;
+        if (matchCount != 0) {
+            matchedFiles.insert(path);
+        }
+    }
+
+    void recordFailure(const string& path)
+    {
+        failedFiles.insert(path);
+    }
+
+    std::size_t filesScanned() const { return scannedFiles.size(); }
+    std::size_t filesWithMatches() const { return matchedFiles.size(); }
+    std::size_t filesWithErrors() const { return failedFiles.size(); }
+};
+
+// Erase the transient "Processing: ..." progress line, if one is showing.
+void clear_status_line();
+
+void searchStringinFile(const string pathTosearch, const string stringTosearch, BOOL isUnicode,
+                        vector<file_info>& all_file_info, BOOL caseInsensitive = FALSE,
+                        BOOL countMode = FALSE, const HexPattern* hexPat = nullptr,
+                        const ResultCallback& onResult = ResultCallback{},
+                        ScanStats* stats = nullptr);
+
+void searchStringInDir(const std::string& directory, const string stringTosearch, BOOL isUnicode,
+                       vector<file_info>& all_file_info, BOOL caseInsensitive = FALSE,
+                       BOOL countMode = FALSE, const HexPattern* hexPat = nullptr,
+                       const ResultCallback& onResult = ResultCallback{},
+                       ScanStats* stats = nullptr);

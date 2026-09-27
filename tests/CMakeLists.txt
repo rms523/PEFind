@@ -1,0 +1,65 @@
+# Unit tests for PEFind — pure C++ algorithm testing.
+# Tests include winnt_mock.h + algo.h and do NOT depend on Windows SDK.
+
+include(GoogleTest)
+
+add_executable(test_algorithms
+    test_parse_hex.cpp
+    test_bmh_search.cpp
+    test_wildcard_search.cpp
+    test_case_insensitive.cpp
+    test_pe_parsing.cpp
+    test_elf_parsing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/elf_hdrs_helper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/util.cpp
+)
+
+target_include_directories(test_algorithms PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(test_algorithms PRIVATE gtest gtest_main)
+
+gtest_discover_tests(test_algorithms)
+
+add_executable(test_scanner
+    test_scanner.cpp
+)
+
+target_include_directories(test_scanner PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_link_libraries(test_scanner PRIVATE pefind_core gtest gtest_main)
+gtest_discover_tests(test_scanner)
+
+add_test(NAME cli_ascii_result_columns
+    COMMAND PEFind -a "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+set_tests_properties(cli_ascii_result_columns PROPERTIES
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format")
+
+add_test(NAME cli_ascii_statistics
+    COMMAND PEFind -a "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+set_tests_properties(cli_ascii_statistics PROPERTIES
+    PASS_REGULAR_EXPRESSION "Files with scan errors: [0-9]+")
+
+add_test(NAME cli_hex_result_columns
+    COMMAND PEFind --hex "50 45 46 69 6E 64" "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
+set_tests_properties(cli_hex_result_columns PROPERTIES
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format")
+
+add_test(NAME cli_hex_count_result_columns
+    COMMAND PEFind --hex "50 45 46 69 6E 64" -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md")
+set_tests_properties(cli_hex_count_result_columns PROPERTIES
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format.*Matches")
+
+add_test(NAME cli_ascii_count_result_columns
+    COMMAND PEFind -a -c "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+set_tests_properties(cli_ascii_count_result_columns PROPERTIES
+    PASS_REGULAR_EXPRESSION "FilePath.*FileOff.*SecIndex.*secOffset.*secName.*Format.*Matches")
+
+add_test(NAME cli_reject_count_with_nth
+    COMMAND PEFind -c -n 1 "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+set_tests_properties(cli_reject_count_with_nth PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME cli_double_dash_ends_options
+    COMMAND PEFind -a -- "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "-verbose")
+set_tests_properties(cli_double_dash_ends_options PROPERTIES
+    PASS_REGULAR_EXPRESSION "Matches found: [1-9]")

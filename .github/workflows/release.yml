@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: PEFind-windows-x64.zip
+            exe_name: PEFind.exe
+          - os: ubuntu-latest
+            artifact_name: PEFind-linux-x64.tar.gz
+            exe_name: PEFind
+          - os: macos-latest
+            artifact_name: PEFind-macos-universal.tar.gz
+            exe_name: PEFind
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          args=(-B build -DCMAKE_BUILD_TYPE=Release -DPEFIND_BUILD_TESTS=ON)
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            # The macOS asset is published as a universal binary.
+            args+=("-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64")
+          fi
+          cmake "${args[@]}"
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cmake --build build --config Release --verbose 2>&1 | tee build.log
+            status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then
+              echo '::group::Build log (last 150 lines)'
+              tail -n 150 build.log
+              echo '::endgroup::'
+              exit "$status"
+            fi
+          else
+            cmake --build build
+          fi
+
+      - name: Test
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ctest --test-dir build -C Release --output-on-failure
+          else
+            ctest --test-dir build --output-on-failure
+          fi
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter ${{ matrix.exe_name }} |
+            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
+            Select-Object -First 1
+          if (-not $exe) {
+            throw "${{ matrix.exe_name }} not found under build/"
+          }
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $exe.FullName dist/${{ matrix.exe_name }}
+          Copy-Item README.md dist/README.md
+          Copy-Item LICENSE dist/LICENSE
+          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact_name }} -Force
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          exe="$(find build -type f -name '${{ matrix.exe_name }}' ! -path '*/CMakeFiles/*' | head -n 1)"
+          if [ -z "$exe" ]; then
+            echo "${{ matrix.exe_name }} not found under build/"
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp "$exe" "dist/${{ matrix.exe_name }}"
+          cp README.md dist/README.md
+          cp LICENSE dist/LICENSE
+          tar -czf "${{ matrix.artifact_name }}" -C dist .
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          files: ${{ matrix.artifact_name }}
+          generate_release_notes: ${{ matrix.os == 'ubuntu-latest' }}

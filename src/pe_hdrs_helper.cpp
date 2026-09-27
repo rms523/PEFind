@@ -1,0 +1,175 @@
+#include "pe_hdrs_helper.h"
+#include "util.h"
+
+BYTE* get_nt_hrds(const BYTE* pe_buffer, size_t buffer_size)
+{
+    if (pe_buffer == NULL || buffer_size < sizeof(IMAGE_DOS_HEADER)) return NULL;
+
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(pe_buffer);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
+
+    // Allow e_lfanew up to 64KB; real PE files can keep NT headers well past 1024.
+    const LONG kMaxOffset = 65536;
+    LONG pe_offset = idh->e_lfanew;
+    if (pe_offset < 0 || pe_offset > kMaxOffset) return NULL;
+
+    size_t nt_offset = static_cast<size_t>(pe_offset);
+    if (nt_offset > buffer_size || buffer_size - nt_offset < sizeof(DWORD)) return NULL;
+
+    BYTE* nt_ptr = const_cast<BYTE*>(pe_buffer) + nt_offset;
+    if (reinterpret_cast<const DWORD*>(nt_ptr)[0] != IMAGE_NT_SIGNATURE) return NULL;
+    return nt_ptr;
+}
+
+IMAGE_NT_HEADERS32* get_nt_hrds32(BYTE* pe_buffer, size_t buffer_size)
+{
+    BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
+    if (ptr == NULL) return NULL;
+    if (!validate_ptr(pe_buffer, buffer_size, ptr, sizeof(IMAGE_NT_HEADERS32))) {
+        return NULL;
+    }
+
+    // The optional-header magic decides PE32 vs PE32+; the machine field varies (x86, ARM, ...).
+    auto* inh = reinterpret_cast<IMAGE_NT_HEADERS32*>(ptr);
+    if (inh->FileHeader.SizeOfOptionalHeader >= sizeof(IMAGE_OPTIONAL_HEADER32) &&
+        inh->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        return inh;
+    }
+    return NULL;
+}
+
+IMAGE_NT_HEADERS64* get_nt_hrds64(const BYTE* pe_buffer, size_t buffer_size)
+{
+    const BYTE* ptr = get_nt_hrds(pe_buffer, buffer_size);
+    if (ptr == NULL) return NULL;
+    if (!validate_ptr(pe_buffer, buffer_size, ptr, sizeof(IMAGE_NT_HEADERS64))) {
+        return NULL;
+    }
+
+    // PE32+ is identified by the optional-header magic (AMD64, ARM64, IA64 all use it).
+    const auto* inh64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(ptr);
+    if (inh64->FileHeader.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) ||
+        inh64->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        return NULL;
+    }
+    return const_cast<IMAGE_NT_HEADERS64*>(inh64);
+}
+
+bool is64bit(const BYTE* pe_buffer, size_t buffer_size)
+{
+    return get_nt_hrds64(pe_buffer, buffer_size) != NULL;
+}
+
+IMAGE_DATA_DIRECTORY* get_pe_directory(const BYTE* pe_buffer, size_t buffer_size, DWORD dir_id)
+{
+    if (dir_id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES) return NULL;
+
+    IMAGE_DATA_DIRECTORY* peDir = nullptr;
+    if (auto* nthdr64 = get_nt_hrds64(pe_buffer, buffer_size)) {
+        peDir = &(nthdr64->OptionalHeader.DataDirectory[dir_id]);
+    } else {
+        auto* nthdr32 = get_nt_hrds32(const_cast<BYTE*>(pe_buffer), buffer_size);
+        if (nthdr32 == NULL) return NULL;
+        peDir = &(nthdr32->OptionalHeader.DataDirectory[dir_id]);
+    }
+    if (peDir->VirtualAddress == 0) {
+        return NULL;
+    }
+    return peDir;
+}
+
+ULONGLONG get_module_base(const BYTE* pe_buffer, size_t buffer_size)
+{
+    if (auto* nthdr64 = get_nt_hrds64(pe_buffer, buffer_size)) {
+        return nthdr64->OptionalHeader.ImageBase;
+    }
+
+    auto* nthdr32 = get_nt_hrds32(const_cast<BYTE*>(pe_buffer), buffer_size);
+    if (nthdr32 == NULL) return 0;
+    return static_cast<ULONGLONG>(nthdr32->OptionalHeader.ImageBase);
+}
+
+// Get the section header that contains a given file offset.
+// Uses DWORD64 for globalOffset to correctly handle files larger than 4 GB.
+PIMAGE_SECTION_HEADER get_section_hdr(const BYTE* payload, const size_t buffer_size, DWORD64 globalOffset, int &sectionIndex)
+{
+    if (payload == NULL) return NULL;
+
+    const BYTE* nt_hdr = get_nt_hrds(payload, buffer_size);
+    if (nt_hdr == NULL) {
+        return NULL;
+    }
+
+    // Validate we have enough data for the signature and file header.
+    if (!validate_ptr(payload, buffer_size, nt_hdr, sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER))) {
+        return NULL;
+    }
+
+    const IMAGE_FILE_HEADER* fileHdr = reinterpret_cast<const IMAGE_FILE_HEADER*>(nt_hdr + sizeof(DWORD));
+    const BYTE* optionalHeader = reinterpret_cast<const BYTE*>(fileHdr) + sizeof(IMAGE_FILE_HEADER);
+    if (fileHdr->SizeOfOptionalHeader < sizeof(WORD) ||
+        !validate_ptr(payload, buffer_size, optionalHeader, fileHdr->SizeOfOptionalHeader)) {
+        return NULL;
+    }
+
+    const WORD optionalMagic = *reinterpret_cast<const WORD*>(optionalHeader);
+    const BYTE* secPtr = nullptr;
+
+    if (optionalMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        if (fileHdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64)) {
+            return NULL;
+        }
+        auto* nthdr64 = reinterpret_cast<const IMAGE_NT_HEADERS64*>(nt_hdr);
+        secPtr = reinterpret_cast<const BYTE*>(&nthdr64->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
+    } else if (optionalMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        if (fileHdr->SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER32)) {
+            return NULL;
+        }
+        auto* nthdr32 = reinterpret_cast<const IMAGE_NT_HEADERS32*>(nt_hdr);
+        secPtr = reinterpret_cast<const BYTE*>(&nthdr32->OptionalHeader) + fileHdr->SizeOfOptionalHeader;
+    } else {
+        return NULL;
+    }
+
+    if (fileHdr->NumberOfSections == 0) {
+        return NULL;
+    }
+
+    // Iterate section headers using proper struct array indexing.
+    const size_t secSize = sizeof(IMAGE_SECTION_HEADER);
+
+    for (int numberOfSections = 0; numberOfSections < fileHdr->NumberOfSections; ++numberOfSections) {
+        const auto* section = reinterpret_cast<const IMAGE_SECTION_HEADER*>(secPtr + (numberOfSections * secSize));
+
+        // Validate the struct pointer is within bounds before accessing fields
+        if (!validate_ptr(payload, buffer_size, section, sizeof(IMAGE_SECTION_HEADER))) {
+            return NULL;
+        }
+
+        DWORD64 rawAddress = section->PointerToRawData;
+        DWORD64 rawSize    = section->SizeOfRawData;
+
+        // Check if the global offset falls within this section's raw data range.
+        // Use 64-bit arithmetic to avoid overflow on large files.
+        if (rawAddress <= globalOffset && globalOffset < (rawAddress + rawSize)) {
+            sectionIndex = numberOfSections;
+            return const_cast<IMAGE_SECTION_HEADER*>(section);
+        }
+    }
+
+    // Not found in any section
+    return NULL;
+}
+
+BOOL checkPE(const BYTE* buf, size_t buffer_size)
+{
+    if (buf == NULL || buffer_size < sizeof(IMAGE_DOS_HEADER)) {
+        return false;
+    }
+
+    const IMAGE_DOS_HEADER* idh = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (idh->e_magic != IMAGE_DOS_SIGNATURE) {
+        return false;
+    }
+    return true;
+}
