@@ -274,6 +274,43 @@ TEST(ScannerProduction, EmptyFileIsScannedNotAnError)
     EXPECT_EQ(stats.filesWithErrors(), 0u);
 }
 
+TEST(ScannerProduction, CountModeHandlesDenseMatchesAcrossChunks)
+{
+    constexpr size_t file_size = 16 * 1024 * 1024;
+    TempFile file(std::vector<BYTE>(file_size, 'A'));
+    ASSERT_FALSE(file.utf8Path().empty());
+
+    std::vector<file_info> matches;
+    ScanStats stats;
+    searchStringinFile(file.utf8Path(), "A", FALSE, matches, FALSE, TRUE,
+                       nullptr, ResultCallback{}, &stats);
+
+    ASSERT_EQ(matches.size(), 1u);
+    EXPECT_EQ(matches[0].fileoffset, 0u);
+    EXPECT_EQ(matches[0].stringTosearch, std::to_string(file_size));
+    EXPECT_EQ(stats.matchesFound, file_size);
+}
+
+TEST(ScannerProduction, CountModeCountsBoundaryMatchOnce)
+{
+    constexpr size_t chunk_size = 8 * 1024 * 1024;
+    std::vector<BYTE> bytes(chunk_size + 2, 'X');
+    bytes[chunk_size - 1] = 'A';
+    bytes[chunk_size] = 'B';
+    TempFile file(bytes);
+    ASSERT_FALSE(file.utf8Path().empty());
+
+    std::vector<file_info> matches;
+    ScanStats stats;
+    searchStringinFile(file.utf8Path(), "AB", FALSE, matches, FALSE, TRUE,
+                       nullptr, ResultCallback{}, &stats);
+
+    ASSERT_EQ(matches.size(), 1u);
+    EXPECT_EQ(matches[0].fileoffset, chunk_size - 1);
+    EXPECT_EQ(matches[0].stringTosearch, "1");
+    EXPECT_EQ(stats.matchesFound, 1u);
+}
+
 TEST(ScannerProduction, UnicodeCaseInsensitiveFindsOddAndEvenOffsets)
 {
     // "Ab" as UTF-16LE at offset 1 (odd) and offset 6 (even), with differing case.
@@ -305,6 +342,27 @@ TEST(PlatformText, LowercasesLatin1GreekAndCyrillic)
 }
 
 #if !defined(_WIN32)
+TEST(ScannerProduction, UnreadableDirectoryIsCountedAsError)
+{
+    if (geteuid() == 0) GTEST_SKIP() << "Root can read directories without permission bits.";
+
+    char dir[] = "/tmp/pefinddirXXXXXX";
+    ASSERT_NE(mkdtemp(dir), nullptr);
+    ASSERT_EQ(chmod(dir, 0000), 0);
+
+    std::vector<file_info> matches;
+    ScanStats stats;
+    searchStringInDir(dir, "A", FALSE, matches, FALSE, FALSE,
+                      nullptr, ResultCallback{}, &stats);
+
+    EXPECT_TRUE(matches.empty());
+    EXPECT_EQ(stats.filesScanned(), 0u);
+    EXPECT_EQ(stats.filesWithErrors(), 1u);
+
+    EXPECT_EQ(chmod(dir, 0700), 0);
+    EXPECT_EQ(rmdir(dir), 0);
+}
+
 TEST(ScannerProduction, FifoIsRejectedWithoutBlocking)
 {
     char dir[] = "/tmp/pefindfifoXXXXXX";

@@ -59,6 +59,10 @@ add_test(NAME cli_reject_count_with_nth
     COMMAND PEFind -c -n 1 "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
 set_tests_properties(cli_reject_count_with_nth PROPERTIES WILL_FAIL TRUE)
 
+add_test(NAME cli_reject_negative_nth
+    COMMAND PEFind -n -1 "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "PEFind")
+set_tests_properties(cli_reject_negative_nth PROPERTIES WILL_FAIL TRUE)
+
 add_test(NAME cli_double_dash_ends_options
     COMMAND PEFind -a -- "${CMAKE_CURRENT_SOURCE_DIR}/../README.md" "-verbose")
 set_tests_properties(cli_double_dash_ends_options PROPERTIES

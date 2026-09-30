@@ -138,12 +138,12 @@ inline int search_bmh(const uint8_t* haystack, size_t haystackLen,
 }
 
 // Find ALL occurrences of needle in haystack using Boyer-Moore-Horspool.
-inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen,
-                                      const uint8_t* needle, size_t needleLen,
-                                      ByteCompare cmp) {
-    std::vector<int> positions;
-    if (needleLen == 0 || needleLen > haystackLen) return positions;
-    if (haystack == nullptr || needle == nullptr || cmp == nullptr) return positions;
+template <typename Emit>
+inline void for_each_bmh(const uint8_t* haystack, size_t haystackLen,
+                         const uint8_t* needle, size_t needleLen,
+                         ByteCompare cmp, Emit emit) {
+    if (needleLen == 0 || needleLen > haystackLen) return;
+    if (haystack == nullptr || needle == nullptr || cmp == nullptr) return;
 
     constexpr size_t ALPHABET_SIZE = 256;
     int skip[ALPHABET_SIZE];
@@ -153,9 +153,17 @@ inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen
     while (i <= haystackLen - needleLen) {
         size_t j = needleLen;
         while (j > 0 && cmp(haystack[i + j - 1], needle[j - 1])) { --j; }
-        if (j == 0) { positions.push_back(static_cast<int>(i)); ++i; }
+        if (j == 0) { emit(static_cast<int>(i)); ++i; }
         else { i += skip[static_cast<uint8_t>(haystack[i + needleLen - 1])]; }
     }
+}
+
+inline std::vector<int> find_all_bmh(const uint8_t* haystack, size_t haystackLen,
+                                      const uint8_t* needle, size_t needleLen,
+                                      ByteCompare cmp) {
+    std::vector<int> positions;
+    for_each_bmh(haystack, haystackLen, needle, needleLen, cmp,
+                 [&positions](int pos) { positions.push_back(pos); });
     return positions;
 }
 
@@ -201,15 +209,15 @@ inline std::vector<uint64_t> find_all_bmh_chunked(const uint8_t* haystack, size_
 }
 
 // Find all occurrences of a hex pattern (with optional wildcards) using sliding window.
-inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t haystackLen, 
-                                                 const HexPattern& pattern) {
-    std::vector<int> positions;
-    if (pattern.bytes.empty() || pattern.isWildcard.size() != pattern.bytes.size()) return positions;
+template <typename Emit>
+inline void for_each_with_wildcards(const uint8_t* haystack, size_t haystackLen,
+                                    const HexPattern& pattern, Emit emit) {
+    if (pattern.bytes.empty() || pattern.isWildcard.size() != pattern.bytes.size()) return;
 
     int needleLen = static_cast<int>(pattern.bytes.size());
-    if (needleLen > static_cast<int>(haystackLen)) return positions;
+    if (needleLen > static_cast<int>(haystackLen)) return;
 
-    if (!pattern.hasExactByte()) return positions;
+    if (!pattern.hasExactByte()) return;
 
     for (size_t i = 0; i <= haystackLen - static_cast<size_t>(needleLen); ++i) {
         bool match = true;
@@ -218,8 +226,15 @@ inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t 
                 match = false;
             }
         }
-        if (match) positions.push_back(static_cast<int>(i));
+        if (match) emit(static_cast<int>(i));
     }
+}
+
+inline std::vector<int> find_all_with_wildcards(const uint8_t* haystack, size_t haystackLen,
+                                                 const HexPattern& pattern) {
+    std::vector<int> positions;
+    for_each_with_wildcards(haystack, haystackLen, pattern,
+                            [&positions](int pos) { positions.push_back(pos); });
     return positions;
 }
 

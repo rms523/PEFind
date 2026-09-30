@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -233,7 +234,8 @@ static void checkStringDir(const string& dir, const string& str, BOOL isUnicode,
     try {
         searchStringInDir(dir, str, isUnicode, results, ci, countMode, hexPat, onResult, stats);
     } catch (std::exception const& e) {
-        std::cout << "Exception: " << e.what() << std::endl;
+        std::cerr << "Exception scanning directory " << dir << ": " << e.what() << std::endl;
+        if (stats) stats->recordFailure(dir);
     }
 }
 
@@ -348,10 +350,12 @@ static bool parse_args(int argc, char** argv, CliArgs& out)
         else if (arg == "-n" || arg == "--nth") {
             if (i + 1 >= argc) return false;
             ++i;
+            if (argv[i][0] < '0' || argv[i][0] > '9') return false;
             char* end = nullptr;
             errno = 0;
-            unsigned long n = std::strtoul(argv[i], &end, 10);
-            if (errno != 0 || end == argv[i] || *end != '\0' || n == 0) return false;
+            unsigned long long n = std::strtoull(argv[i], &end, 10);
+            if (errno != 0 || end == argv[i] || *end != '\0' || n == 0 ||
+                n > std::numeric_limits<size_t>::max()) return false;
             out.nthMatch = static_cast<size_t>(n);
         }
         else if (arg == "--hex") {
@@ -491,5 +495,5 @@ int main(int argc, char** argv)
 
     print_statistics(scanStats, all_file_info.size());
 
-    return 0;
+    return scanStats.filesWithErrors() == 0 ? 0 : 2;
 }

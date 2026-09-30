@@ -238,20 +238,20 @@ void platform_lowercase_utf16(char16_t* data, size_t count)
     }
 }
 
-void platform_walk_directory(
+bool platform_walk_directory(
     const std::string& directory,
     const std::function<void(const std::string& full_path, bool is_directory, bool is_symlink)>& visitor)
 {
     const std::wstring wide_directory = utf8_to_wide(directory);
     if (wide_directory.empty() && !directory.empty()) {
-        return;
+        return false;
     }
 
     const std::wstring pattern = wide_directory + L"\\*";
     WIN32_FIND_DATAW find_data {};
     HANDLE find_handle = FindFirstFileW(pattern.c_str(), &find_data);
     if (find_handle == INVALID_HANDLE_VALUE) {
-        return;
+        return GetLastError() == ERROR_FILE_NOT_FOUND;
     }
 
     do {
@@ -270,7 +270,9 @@ void platform_walk_directory(
         visitor(combined, is_directory, is_symlink);
     } while (FindNextFileW(find_handle, &find_data) != 0);
 
+    const DWORD last_error = GetLastError();
     FindClose(find_handle);
+    return last_error == ERROR_NO_MORE_FILES;
 }
 
 #endif

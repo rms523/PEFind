@@ -29,6 +29,7 @@ void platform_lowercase_utf16(char16_t* data, size_t count);
 std::u16string platform_utf8_to_utf16le(const std::string& text);
 std::string platform_utf16le_to_utf8(const char16_t* data, size_t count);
 
-void platform_walk_directory(
+// Returns false if the directory cannot be read completely.
+bool platform_walk_directory(
     const std::string& directory,
     const std::function<void(const std::string& full_path, bool is_directory, bool is_symlink)>& visitor);

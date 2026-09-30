@@ -131,23 +131,23 @@ static bool bytesEqualCI(BYTE a, BYTE b)
            std::tolower(static_cast<unsigned char>(b));
 }
 
+template <typename Emit>
 static void search_chunk(const BYTE* chunk, size_t chunkLen,
                          const BYTE* needle, int needleLen, BOOL isUnicode, BOOL caseInsensitive,
-                         uint64_t baseOffset, vector<uint64_t>& allOffsets,
-                         const HexPattern* hexPat = nullptr)
+                         uint64_t baseOffset, Emit emit, const HexPattern* hexPat = nullptr)
 {
     if (hexPat != nullptr && !hexPat->bytes.empty()) {
         bool hasWildcards = false;
         for (bool isW : hexPat->isWildcard) { if (isW) { hasWildcards = true; break; } }
 
         if (!hasWildcards) {
-            auto positions = find_all_bmh(
+            for_each_bmh(
                 chunk, chunkLen, hexPat->bytes.data(), static_cast<size_t>(hexPat->bytes.size()),
-                [](uint8_t a, uint8_t b) { return a == b; });
-            for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<uint64_t>(pos));
+                [](uint8_t a, uint8_t b) { return a == b; },
+                [&](int pos) { emit(baseOffset + static_cast<uint64_t>(pos)); });
         } else {
-            auto positions = find_all_with_wildcards(chunk, chunkLen, *hexPat);
-            for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<uint64_t>(pos));
+            for_each_with_wildcards(chunk, chunkLen, *hexPat,
+                                    [&](int pos) { emit(baseOffset + static_cast<uint64_t>(pos)); });
         }
     } else if (isUnicode && caseInsensitive) {
         size_t wLen = static_cast<size_t>(needleLen / static_cast<int>(sizeof(char16_t)));
@@ -166,25 +166,23 @@ static void search_chunk(const BYTE* chunk, size_t chunkLen,
             memcpy(chunkLower.data(), chunk + alignment, chunkWLenActual * sizeof(char16_t));
             platform_lowercase_utf16(chunkLower.data(), chunkWLenActual);
 
-            auto positions = find_all_bmh(
+            for_each_bmh(
                 reinterpret_cast<const uint8_t*>(chunkLower.data()),
                 chunkWLenActual * sizeof(char16_t),
                 reinterpret_cast<const uint8_t*>(patLower.data()), needleLen,
-                [](uint8_t a, uint8_t b) { return a == b; });
-            for (int pos : positions) {
-                // Odd positions straddle two code units that were lowercased as a different
-                // pair; the other alignment pass covers those offsets correctly.
-                if (pos % 2 != 0) continue;
-                allOffsets.push_back(baseOffset + alignment + static_cast<uint64_t>(pos));
-            }
+                [](uint8_t a, uint8_t b) { return a == b; },
+                [&](int pos) {
+                    // Odd positions straddle two code units that were lowercased as a different
+                    // pair; the other alignment pass covers those offsets correctly.
+                    if (pos % 2 == 0) emit(baseOffset + alignment + static_cast<uint64_t>(pos));
+                });
         }
     } else {
         ByteCompare cmp = caseInsensitive ? bytesEqualCI :
                           [](BYTE a, BYTE b) { return a == b; };
 
-        auto positions = find_all_bmh(
-            chunk, chunkLen, needle, static_cast<size_t>(needleLen), cmp);
-        for (int pos : positions) allOffsets.push_back(baseOffset + static_cast<uint64_t>(pos));
+        for_each_bmh(chunk, chunkLen, needle, static_cast<size_t>(needleLen), cmp,
+                     [&](int pos) { emit(baseOffset + static_cast<uint64_t>(pos)); });
     }
 }
 
@@ -306,6 +304,8 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
     }
 
     vector<uint64_t> allOffsets;
+    size_t countedMatches = 0;
+    uint64_t firstMatchOffset = 0;
 
     for (;;) {
         size_t bytes_read = 0;
@@ -319,9 +319,18 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
         const size_t search_size = overlap_len + bytes_read;
 
-        search_chunk(buf.data(), search_size,
-                     pattern, pattern_len, isUnicode, caseInsensitive,
-                     base_offset, allOffsets, hexPat);
+        search_chunk(buf.data(), search_size, pattern, pattern_len, isUnicode,
+                     caseInsensitive, base_offset,
+                     [&](uint64_t offset) {
+                         if (countMode) {
+                             if (countedMatches == 0 || offset < firstMatchOffset) {
+                                 firstMatchOffset = offset;
+                             }
+                             ++countedMatches;
+                         } else {
+                             allOffsets.push_back(offset);
+                         }
+                     }, hexPat);
 
         const size_t new_overlap = (std::min)(overlap, search_size);
         if (new_overlap > 0) {
@@ -333,21 +342,23 @@ void searchStringinFile(const string pathTosearch, const string stringTosearch, 
 
     platform_file_close(file);
 
-    std::sort(allOffsets.begin(), allOffsets.end());
-    allOffsets.erase(std::unique(allOffsets.begin(), allOffsets.end()), allOffsets.end());
+    if (!countMode) {
+        std::sort(allOffsets.begin(), allOffsets.end());
+        allOffsets.erase(std::unique(allOffsets.begin(), allOffsets.end()), allOffsets.end());
+    }
     if (stats) {
-        stats->recordFile(pathTosearch, allOffsets.size());
+        stats->recordFile(pathTosearch, countMode ? countedMatches : allOffsets.size());
     }
 
-    if (countMode && !allOffsets.empty()) {
-        const uint64_t firstOffset = allOffsets[0];
+    if (countMode && countedMatches != 0) {
+        const uint64_t firstOffset = firstMatchOffset;
         const SectionMatch section =
             lookup_section(format, header_buf.data(), header_buf.size(), elf_sections, firstOffset);
 
         file_info fi;
         fi.filepath = pathTosearch;
         fi.fileoffset = firstOffset;
-        fi.stringTosearch = std::to_string(allOffsets.size());
+        fi.stringTosearch = std::to_string(countedMatches);
 
         if (section.found) {
             fi.sectionindex = section.index;
@@ -380,7 +391,7 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
                        BOOL countMode, const HexPattern* hexPat, const ResultCallback& onResult,
                        ScanStats* stats)
 {
-    platform_walk_directory(directory,
+    if (!platform_walk_directory(directory,
         [&](const std::string& combined_path, bool is_directory, bool is_symlink) {
             if (is_directory) {
                 if (is_symlink) {
@@ -396,5 +407,8 @@ void searchStringInDir(const std::string& directory, const string stringTosearch
             }
             searchStringinFile(combined_path, stringTosearch, isUnicode, all_file_info,
                                caseInsensitive, countMode, hexPat, onResult, stats);
-        });
+        })) {
+        if (stats) stats->recordFailure(directory);
+        std::cerr << "Failed to read directory: " << directory << std::endl;
+    }
 }

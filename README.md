@@ -126,6 +126,7 @@ ELF section-aware string search:
 - Result columns: `FilePath`, `FileOff`, `SecIndex`, `secOffset`, `secName`, and `Format`.
 - Unsorted per-match searches print rows as files finish scanning. `--sort`, `--count`, and `--nth` render after the scan so results can be sorted or consolidated first.
 - Every scan ends with statistics: files scanned, files with matches, matches found, result rows, and files with scan errors.
+- A scan with file or directory access errors exits with status 2. Invalid arguments exit with status 1.
 - `--count` keeps those columns and appends `Matches`. Location/section columns describe the earliest counted match in that file.
 - `Format` reports binary status: `PE` / `ELF` for in-section matches; overlay messages for recognized binaries with matches outside sections; `Not a PE or ELF file.` otherwise.
 - ELF support covers ELF32 and ELF64 section mapping, little- and big-endian, including files whose section table is stored far from the start (as in most large shared libraries).

@@ -273,30 +273,30 @@ void platform_lowercase_utf16(char16_t* data, size_t count)
     }
 }
 
-void platform_walk_directory(
+bool platform_walk_directory(
     const std::string& directory,
     const std::function<void(const std::string& full_path, bool is_directory, bool is_symlink)>& visitor)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
-    fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec);
+    fs::directory_iterator it(directory, ec);
     if (ec) {
-        return;
+        return false;
     }
 
     // Advance with increment(ec): the range-for form throws on I/O errors mid-directory,
     // which would abort the whole scan instead of just this directory.
-    for (; it != fs::directory_iterator(); it.increment(ec)) {
-        if (ec) {
-            return;
-        }
+    for (; it != fs::directory_iterator();) {
         const auto& entry = *it;
         std::error_code entry_ec;
         const std::string full_path = entry.path().string();
         const bool is_symlink = entry.is_symlink(entry_ec);
         const bool is_directory = entry.is_directory(entry_ec);
         visitor(full_path, is_directory, is_symlink);
+        it.increment(ec);
+        if (ec) return false;
     }
+    return true;
 }
 
 #endif
